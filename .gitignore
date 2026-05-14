@@ -26,8 +26,16 @@ yarn-error.log
 /auth.json
 /database/*.sqlite
 /docker-compose.override.yml
+/docker-compose.override.yaml
+/docker-compose.local.yml
+/docker-compose.*.local.yml
 /.fleet
 /.idea
 /.nova
 /.vscode
 /.zed
+/.DS_Store
+Thumbs.db
+*.pid
+*.seed
+*.tmp

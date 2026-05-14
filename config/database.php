@@ -79,11 +79,13 @@ return [
             'database' => env('DB_DATABASE', 'client_portal'),
             'username' => env('DB_USERNAME', 'client_portal'),
             'password' => env('DB_PASSWORD', 'client_portal'),
+            'application_name' => env('DB_APPLICATION_NAME', 'client_portal_be'),
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,
             'search_path' => env('DB_SCHEMA', 'public'),
             'sslmode' => env('DB_SSLMODE', 'disable'),
+            'timezone' => env('DB_TIMEZONE', 'UTC'),
         ],
 
         'sqlsrv' => [
