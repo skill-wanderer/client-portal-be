@@ -1,0 +1,1 @@
+CREATE DATABASE client_portal_test;

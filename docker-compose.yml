@@ -1,0 +1,90 @@
+services:
+  backend-app:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    container_name: client-portal-be-app
+    working_dir: /var/www/html
+    entrypoint: ["/usr/local/bin/backend-entrypoint"]
+    command: ["php", "-S", "0.0.0.0:8000", "-t", "public", "docker/app/router.php"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: local
+      APP_DEBUG: 'true'
+      APP_URL: http://127.0.0.1:8003
+      CACHE_STORE: redis
+      DB_CONNECTION: pgsql
+      DB_DATABASE: client_portal
+      DB_HOST: postgres
+      DB_PASSWORD: client_portal
+      DB_PORT: '5432'
+      DB_USERNAME: client_portal
+      QUEUE_CONNECTION: database
+      REDIS_CLIENT: predis
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      SESSION_CONNECTION: default
+      SESSION_DRIVER: redis
+      SESSION_STORE: redis
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/up || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - client-portal
+    ports:
+      - '8003:8000'
+    volumes:
+      - .:/var/www/html
+
+  postgres:
+    image: postgres:17-bookworm
+    container_name: client-portal-be-postgres
+    environment:
+      POSTGRES_DB: client_portal
+      POSTGRES_PASSWORD: client_portal
+      POSTGRES_USER: client_portal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U client_portal -d client_portal"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - client-portal
+    ports:
+      - '15432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+
+  redis:
+    image: redis:7.2-bookworm
+    container_name: client-portal-be-redis
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - client-portal
+    ports:
+      - '16379:6379'
+    volumes:
+      - redis_data:/data
+
+networks:
+  client-portal:
+    name: client-portal-network
+
+volumes:
+  postgres_data:
+  redis_data:

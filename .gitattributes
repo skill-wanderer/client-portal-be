@@ -1,0 +1,14 @@
+* text=auto eol=lf
+
+*.blade.php diff=html
+*.css diff=css
+*.sh text eol=lf
+*.html diff=html
+*.md diff=markdown
+*.php diff=php
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+
+/.github export-ignore
+CHANGELOG.md export-ignore
+.styleci.yml export-ignore
