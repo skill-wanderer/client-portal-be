@@ -11,6 +11,7 @@ use App\Services\Auth\Exceptions\TokenExchangeException;
 use App\Services\Auth\AuthService;
 use App\Services\Session\SessionData;
 use App\Services\Session\Exceptions\SessionPersistenceException;
+use App\Support\Security\AuthCookieSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,8 +25,6 @@ class AuthController extends Controller
     private const SESSION_COOKIE_NAME = '__session';
 
     private const STATE_COOKIE_NAME = '__state';
-
-    private const COOKIE_SAME_SITE = 'lax';
 
     public function __construct(
         private readonly AuthService $authService,
@@ -181,12 +180,12 @@ class AuthController extends Controller
             name: self::SESSION_COOKIE_NAME,
             value: $sessionId,
             expire: now()->addSeconds(max(1, $ttlSeconds)),
-            path: '/',
-            domain: null,
-            secure: $this->shouldUseSecureCookies(),
+            path: AuthCookieSettings::path(),
+            domain: AuthCookieSettings::domain(),
+            secure: AuthCookieSettings::secure(request()),
             httpOnly: true,
             raw: false,
-            sameSite: self::COOKIE_SAME_SITE,
+            sameSite: AuthCookieSettings::sameSite(),
         );
     }
 
@@ -196,12 +195,12 @@ class AuthController extends Controller
             name: self::STATE_COOKIE_NAME,
             value: $state,
             expire: now()->addMinutes(5),
-            path: '/',
-            domain: null,
-            secure: $this->shouldUseSecureCookies(),
+            path: AuthCookieSettings::path(),
+            domain: AuthCookieSettings::domain(),
+            secure: AuthCookieSettings::secure(request()),
             httpOnly: true,
             raw: false,
-            sameSite: self::COOKIE_SAME_SITE,
+            sameSite: AuthCookieSettings::sameSite(),
         );
     }
 
@@ -211,20 +210,13 @@ class AuthController extends Controller
             name: self::STATE_COOKIE_NAME,
             value: '',
             expire: now()->subMinute(),
-            path: '/',
-            domain: null,
-            secure: $this->shouldUseSecureCookies(),
+            path: AuthCookieSettings::path(),
+            domain: AuthCookieSettings::domain(),
+            secure: AuthCookieSettings::secure(request()),
             httpOnly: true,
             raw: false,
-            sameSite: self::COOKIE_SAME_SITE,
+            sameSite: AuthCookieSettings::sameSite(),
         );
-    }
-
-    private function shouldUseSecureCookies(): bool
-    {
-        $appUrl = strtolower((string) config('app.url', ''));
-
-        return request()->isSecure() || str_starts_with($appUrl, 'https://');
     }
 
     private function resolveCorrelationId(Request $request): string

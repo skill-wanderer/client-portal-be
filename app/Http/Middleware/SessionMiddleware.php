@@ -6,6 +6,7 @@ use App\Services\Session\Exceptions\SessionRetrievalException;
 use App\Services\Session\SessionData;
 use App\Services\Session\SessionService;
 use App\Support\Api\ApiResponse;
+use App\Support\Security\AuthCookieSettings;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -116,12 +117,12 @@ class SessionMiddleware
             name: '__session',
             value: '',
             expire: now()->subMinute(),
-            path: '/',
-            domain: null,
-            secure: true,
+            path: AuthCookieSettings::path(),
+            domain: AuthCookieSettings::domain(),
+            secure: AuthCookieSettings::secure(),
             httpOnly: true,
             raw: false,
-            sameSite: 'lax',
+            sameSite: AuthCookieSettings::sameSite(),
         );
     }
 

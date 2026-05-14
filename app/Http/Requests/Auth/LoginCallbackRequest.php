@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Support\Security\AuthCookieSettings;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -49,12 +50,12 @@ class LoginCallbackRequest extends FormRequest
             name: '__state',
             value: '',
             expire: now()->subMinute(),
-            path: '/v1/auth/callback',
-            domain: null,
-            secure: true,
+            path: AuthCookieSettings::path(),
+            domain: AuthCookieSettings::domain(),
+            secure: AuthCookieSettings::secure($this),
             httpOnly: true,
             raw: false,
-            sameSite: 'lax',
+            sameSite: AuthCookieSettings::sameSite(),
         ));
 
         throw new HttpResponseException($response);
