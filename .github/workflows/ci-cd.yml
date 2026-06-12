@@ -16,6 +16,23 @@ env:
 jobs:
   test-build-publish:
     runs-on: ubuntu-latest
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      APP_DEBUG: 'true'
+      APP_URL: http://localhost
+      APP_MAINTENANCE_DRIVER: file
+      BCRYPT_ROUNDS: '4'
+      BE_DEPLOYMENT_ID: backend-test-deploy
+      CACHE_STORE: array
+      CONTRACT_VERSION: contract-test-v1
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      FRONTEND_APP_URL: http://localhost:3000
+      MAIL_MAILER: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
 
     steps:
       - name: Checkout
@@ -33,6 +50,14 @@ jobs:
 
       - name: Validate Composer manifest
         run: composer validate --strict
+
+      - name: Prepare Laravel writable directories
+        run: |
+          mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/framework/views storage/logs bootstrap/cache
+          chmod -R 775 storage bootstrap/cache
+
+      - name: Clear Laravel config
+        run: php artisan config:clear
 
       - name: Run tests
         run: php artisan test

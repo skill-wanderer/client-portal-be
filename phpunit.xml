@@ -19,11 +19,18 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <env name="APP_KEY" value="base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="/>
+        <env name="APP_DEBUG" value="true"/>
+        <env name="APP_URL" value="http://localhost"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="BE_DEPLOYMENT_ID" value="backend-test-deploy"/>
         <env name="CACHE_STORE" value="array"/>
+        <env name="CONTRACT_VERSION" value="contract-test-v1"/>
+        <env name="CORS_ALLOWED_ORIGINS" value="http://localhost:3000"/>
         <env name="DB_CONNECTION" value="sqlite"/>
         <env name="DB_DATABASE" value=":memory:"/>
+        <env name="FRONTEND_APP_URL" value="http://localhost:3000"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
