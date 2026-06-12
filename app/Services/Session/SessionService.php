@@ -4,13 +4,13 @@ namespace App\Services\Session;
 
 use App\Services\Session\Exceptions\SessionPersistenceException;
 use App\Services\Session\Exceptions\SessionRetrievalException;
-use Illuminate\Contracts\Redis\Factory as RedisFactory;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Throwable;
 
 class SessionService
 {
     public function __construct(
-        private readonly RedisFactory $redis,
+        private readonly CacheRepository $cache,
     ) {
     }
 
@@ -40,9 +40,7 @@ class SessionService
                 'created_at' => now()->toIso8601String(),
             ], JSON_THROW_ON_ERROR);
 
-            $result = $this->redis
-                ->connection()
-                ->setex('session:'.$sessionId, $ttlSeconds, $payload);
+            $result = $this->cache->put($this->cacheKey($sessionId), $payload, $ttlSeconds);
         } catch (Throwable $exception) {
             throw new SessionPersistenceException('Failed to persist auth session.', 0, $exception);
         }
@@ -64,9 +62,7 @@ class SessionService
         }
 
         try {
-            $payload = $this->redis
-                ->connection()
-                ->get('session:'.$sessionId);
+            $payload = $this->cache->get($this->cacheKey($sessionId));
         } catch (Throwable $exception) {
             throw new SessionRetrievalException('Failed to load auth session.', 0, $exception);
         }
@@ -95,11 +91,14 @@ class SessionService
         }
 
         try {
-            $this->redis
-                ->connection()
-                ->del('session:'.$sessionId);
+            $this->cache->forget($this->cacheKey($sessionId));
         } catch (Throwable $exception) {
             throw new SessionRetrievalException('Failed to delete auth session.', 0, $exception);
         }
+    }
+
+    private function cacheKey(string $sessionId): string
+    {
+        return 'session:'.$sessionId;
     }
 }

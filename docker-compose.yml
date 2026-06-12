@@ -11,112 +11,40 @@ services:
     working_dir: /var/www/html
     entrypoint: ["/usr/local/bin/backend-entrypoint"]
     command: ["php", "-S", "0.0.0.0:8000", "-t", "public", "docker/app/router.php"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     environment:
+      APP_KEY: base64:o0j6ZRhOLfC5hz+j4KB38B2jW7sMakruqfkhbBywlfs=
+      APP_NAME: client-portal-be
       APP_ENV: local
-      APP_DEBUG: 'true'
-      APP_URL: http://127.0.0.1:8003
-      DB_APPLICATION_NAME: client_portal_be
-      CACHE_STORE: redis
+      APP_DEBUG: 'false'
+      APP_URL: http://127.0.0.1:8000
+      BE_DEPLOYMENT_ID: compose-local
+      CACHE_STORE: file
       CORS_ALLOWED_ORIGINS: http://127.0.0.1:3000,http://localhost:3000
-      DB_CHARSET: utf8
-      DB_CONNECTION: pgsql
-      DB_DATABASE: client_portal
-      DB_HOST: postgres
-      DB_PASSWORD: client_portal
-      DB_PORT: '5432'
-      DB_SCHEMA: public
-      DB_SSLMODE: disable
-      DB_TIMEZONE: UTC
-      DB_USERNAME: client_portal
+      DB_CONNECTION: sqlite
+      DB_DATABASE: /var/www/html/database/database.sqlite
       FRONTEND_APP_URL: http://127.0.0.1:3000
+      KEYCLOAK_BASE_URL: https://sso.skill-wanderer.com
+      KEYCLOAK_CLIENT_ID: client-portal-fe
+      KEYCLOAK_CLIENT_SECRET: ''
+      KEYCLOAK_REALM: client-portal
       KEYCLOAK_FRONTEND_DASHBOARD_URL: http://127.0.0.1:3000/dashboard
-      KEYCLOAK_REDIRECT_URI: http://127.0.0.1:8003/v1/auth/callback
+      KEYCLOAK_REDIRECT_URI: http://127.0.0.1:8000/v1/auth/callback
+      LOG_CHANNEL: stack
+      LOG_STACK: stderr
       PHP_CLI_SERVER_WORKERS: '4'
-      QUEUE_CONNECTION: database
-      REDIS_CACHE_CONNECTION: cache
-      REDIS_CACHE_DB: '1'
-      REDIS_CLIENT: predis
-      REDIS_DB: '0'
-      REDIS_HOST: redis
-      REDIS_PORT: '6379'
-      SESSION_CONNECTION: default
+      QUEUE_CONNECTION: sync
       SESSION_DOMAIN: 'null'
-      SESSION_DRIVER: redis
+      SESSION_DRIVER: file
       SESSION_HTTP_ONLY: 'true'
       SESSION_PATH: /
       SESSION_SAME_SITE: lax
       SESSION_SECURE_COOKIE: 'null'
-      SESSION_STORE: redis
       TRUSTED_PROXIES: REMOTE_ADDR
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/up || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/up > /dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 20s
-    networks:
-      - client-portal
     ports:
-      - '8003:8000'
-    volumes:
-      - .:/var/www/html
-
-  postgres:
-    image: postgres:18-bookworm
-    container_name: client-portal-be-postgres
-    restart: unless-stopped
-    command: ["postgres", "-c", "timezone=UTC", "-c", "log_timezone=UTC"]
-    environment:
-      PGDATA: /var/lib/postgresql/data/pgdata
-      PGTZ: UTC
-      POSTGRES_DB: client_portal
-      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C.UTF-8 --data-checksums
-      POSTGRES_PASSWORD: client_portal
-      POSTGRES_USER: client_portal
-      TZ: UTC
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U client_portal -d client_portal || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-    networks:
-      - client-portal
-    ports:
-      - '15432:5432'
-    volumes:
-      - postgres18_data:/var/lib/postgresql/data
-      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
-
-  redis:
-    image: redis:7.2-bookworm
-    container_name: client-portal-be-redis
-    restart: unless-stopped
-    command: ["redis-server", "--save", "60", "1", "--bind", "0.0.0.0", "--loglevel", "warning"]
-    healthcheck:
-      test: ["CMD", "redis-cli", "-h", "127.0.0.1", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 5s
-    networks:
-      - client-portal
-    ports:
-      - '16379:6379'
-    volumes:
-      - redis_data:/data
-
-networks:
-  client-portal:
-    name: client-portal-network
-
-volumes:
-  postgres18_data:
-    name: client-portal-be-postgres18-data
-  redis_data:
-    name: client-portal-be-redis-data
+      - '127.0.0.1:8000:8000'
