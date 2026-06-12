@@ -4,7 +4,9 @@ use App\Http\Middleware\DashboardAuditMiddleware;
 use App\Http\Middleware\OwnershipMiddleware;
 use App\Http\Middleware\ProjectsDetailAuditMiddleware;
 use App\Http\Middleware\ProjectsListAuditMiddleware;
+use App\Http\Middleware\RequestContextMiddleware;
 use App\Http\Middleware\RBACMiddleware;
+use App\Http\Middleware\RuntimeProtectionMiddleware;
 use App\Http\Middleware\SessionMiddleware;
 use App\Http\Middleware\TasksCollectionAuditMiddleware;
 use Illuminate\Foundation\Application;
@@ -39,6 +41,9 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware) use ($resolvedTrustedProxies) {
+        $middleware->append(RequestContextMiddleware::class);
+        $middleware->append(RuntimeProtectionMiddleware::class);
+
         $middleware->trustProxies(
             at: $resolvedTrustedProxies,
             headers: Request::HEADER_X_FORWARDED_FOR

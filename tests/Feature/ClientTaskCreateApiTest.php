@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Domain\ClientPortal\Write\Contracts\MutationEventRecorder;
+use App\Models\ClientMutationEvent;
+use App\Models\ClientMutationIdempotency;
 use App\Models\ClientProject;
 use App\Models\ClientTask;
 use App\Services\Session\SessionData;
@@ -10,6 +12,7 @@ use App\Services\Session\SessionService;
 use Carbon\CarbonImmutable;
 use Database\Seeders\ClientPortalReadModelSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Mockery;
 use RuntimeException;
 use Tests\TestCase;
@@ -57,8 +60,13 @@ class ClientTaskCreateApiTest extends TestCase
             ],
         ]);
 
+        $replayGroupId = $this->createReplayGroupId($projectId, $idempotencyKey);
+        $mutationId = $this->assertMutationHeaders($response, $replayGroupId);
+
         $project = ClientProject::query()->findOrFail($projectId);
         $task = ClientTask::query()->findOrFail($expectedTaskId);
+        $event = ClientMutationEvent::query()->sole();
+        $idempotencyRecord = ClientMutationIdempotency::query()->sole();
 
         $this->assertSame(19, $project->task_count);
         $this->assertSame(19, $project->active_task_count);
@@ -70,12 +78,21 @@ class ClientTaskCreateApiTest extends TestCase
         $this->assertFalse($task->archived);
         $this->assertNull($task->completed_at);
         $this->assertSame(1, $task->version);
+        $this->assertSame($mutationId, $event->mutation_id);
+        $this->assertSame($replayGroupId, $event->replay_group_id);
+        $this->assertSame($mutationId, $event->payload['mutation_id'] ?? null);
+        $this->assertSame($replayGroupId, $event->payload['replay_group_id'] ?? null);
+        $this->assertSame($mutationId, $idempotencyRecord->mutation_id);
+        $this->assertSame($replayGroupId, $idempotencyRecord->replay_group_id);
+        $this->assertNotNull($idempotencyRecord->correlation_id);
 
         $this->assertDatabaseHas('client_mutation_events', [
             'name' => 'TaskCreated',
             'aggregate_id' => $expectedTaskId,
             'workspace_id' => $workspaceId,
             'actor_id' => 'user-123',
+            'mutation_id' => $mutationId,
+            'replay_group_id' => $replayGroupId,
         ]);
 
         $this->assertDatabaseHas('client_mutation_idempotency', [
@@ -83,6 +100,8 @@ class ClientTaskCreateApiTest extends TestCase
             'status' => 'completed',
             'aggregate_id' => $expectedTaskId,
             'response_status' => 201,
+            'mutation_id' => $mutationId,
+            'replay_group_id' => $replayGroupId,
         ]);
     }
 
@@ -101,16 +120,21 @@ class ClientTaskCreateApiTest extends TestCase
 
         $firstResponse = $this->authenticatedRequest($projectId, $payload);
         $secondResponse = $this->authenticatedRequest($projectId, $payload);
+        $replayGroupId = $this->createReplayGroupId($projectId, $idempotencyKey);
 
         $firstResponse->assertStatus(201);
         $secondResponse->assertStatus(201);
+        $firstMutationId = $this->assertMutationHeaders($firstResponse, $replayGroupId);
+        $secondMutationId = $this->assertMutationHeaders($secondResponse, $replayGroupId);
+        $secondResponse->assertHeader('X-Idempotent-Replay', 'true');
         $this->assertSame($firstResponse->json('data'), $secondResponse->json('data'));
+        $this->assertNotSame($firstMutationId, $secondMutationId);
         $this->assertSame(1, ClientTask::query()->where('id', $expectedTaskId)->count());
         $this->assertSame(19, ClientProject::query()->findOrFail($projectId)->task_count);
         $this->assertSame(19, ClientProject::query()->findOrFail($projectId)->active_task_count);
         $this->assertSame(2, ClientProject::query()->findOrFail($projectId)->version);
-        $this->assertSame(1, \App\Models\ClientMutationEvent::query()->count());
-        $this->assertSame(1, \App\Models\ClientMutationIdempotency::query()->count());
+        $this->assertSame(1, ClientMutationEvent::query()->count());
+        $this->assertSame(1, ClientMutationIdempotency::query()->count());
     }
 
     public function test_task_create_rejects_reused_idempotency_key_for_different_payload(): void
@@ -140,6 +164,8 @@ class ClientTaskCreateApiTest extends TestCase
                 'reason' => 'IDEMPOTENCY_KEY_REUSED',
             ],
         ]);
+
+        $this->assertMutationHeaders($response, $this->createReplayGroupId($projectId, $idempotencyKey));
     }
 
     public function test_task_create_returns_not_found_for_cross_workspace_project(): void
@@ -299,5 +325,28 @@ class ClientTaskCreateApiTest extends TestCase
     private function createScope(string $projectId): string
     {
         return 'task.create:'.$this->workspaceId('user-123').':'.$projectId;
+    }
+
+    private function createReplayGroupId(string $projectId, string $idempotencyKey): string
+    {
+        return hash('sha256', implode('|', [
+            'task.create',
+            $projectId,
+            $idempotencyKey,
+        ]));
+    }
+
+    private function assertMutationHeaders(TestResponse $response, string $expectedReplayGroupId): string
+    {
+        $response->assertHeader('X-Mutation-ID');
+        $response->assertHeader('X-Replay-Group-ID', $expectedReplayGroupId);
+        $response->assertHeader('X-Correlation-ID');
+
+        $mutationId = $response->headers->get('X-Mutation-ID');
+
+        $this->assertIsString($mutationId);
+        $this->assertNotSame('', $mutationId);
+
+        return $mutationId;
     }
 }

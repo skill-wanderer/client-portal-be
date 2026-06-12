@@ -11,9 +11,7 @@ $allowedOrigins = array_values(array_filter(
 
 if ($allowedOrigins === []) {
     $defaultOrigins = [
-        rtrim((string) env('FRONTEND_APP_URL', 'http://127.0.0.1:3000'), '/'),
-        'http://127.0.0.1:3000',
-        'http://localhost:3000',
+        rtrim((string) env('FRONTEND_APP_URL', ''), '/'),
     ];
 
     $allowedOrigins = array_values(array_unique(array_filter($defaultOrigins, static fn (string $origin): bool => $origin !== '')));
@@ -30,7 +28,15 @@ return [
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => ['X-Correlation-ID'],
+    'exposed_headers' => [
+        'X-Correlation-ID',
+        'X-Request-ID',
+        'X-Deployment-ID',
+        'X-Contract-Version',
+        'X-Mutation-ID',
+        'X-Replay-Group-ID',
+        'X-Idempotent-Replay',
+    ],
 
     'max_age' => 0,
 

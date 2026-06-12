@@ -6,6 +6,7 @@ use App\Services\Session\Exceptions\SessionRetrievalException;
 use App\Services\Session\SessionData;
 use App\Services\Session\SessionService;
 use App\Support\Api\ApiResponse;
+use App\Support\Api\Contracts\ErrorData;
 use App\Support\Security\AuthCookieSettings;
 use Closure;
 use Illuminate\Http\JsonResponse;
@@ -35,9 +36,9 @@ class SessionMiddleware
         $correlationId = $this->resolveCorrelationId($request);
         $request->attributes->set(self::CORRELATION_ID_ATTRIBUTE, $correlationId);
 
-        $sessionId = $request->cookie('__session');
+        $sessionId = $this->resolveSessionToken($request);
 
-        if (! is_string($sessionId) || $sessionId === '') {
+        if ($sessionId === null) {
             return $this->unauthorizedResponse($correlationId, 'NO_SESSION');
         }
 
@@ -88,6 +89,10 @@ class SessionMiddleware
             'message' => 'An authenticated session is required.',
             'reason' => $reason,
             'authenticated' => false,
+            'failure_code' => 'BE_SESSION_EXPIRED',
+            'recovery_hint' => 'reauthenticate',
+            'retryable' => false,
+            'runtime_boundary' => 'backend_session',
         ], 401, $correlationId);
         $response->withCookie($this->expireSessionCookie());
 
@@ -96,12 +101,16 @@ class SessionMiddleware
 
     private function internalErrorResponse(string $correlationId): JsonResponse
     {
-        return ApiResponse::error([
-            'code' => 'internal_error',
-            'message' => 'The auth session could not be resolved.',
-            'reason' => 'INTERNAL_ERROR',
-            'authenticated' => false,
-        ], 500, $correlationId);
+        return ApiResponse::error(new ErrorData(
+            code: 'internal_error',
+            message: 'The auth session could not be resolved.',
+            reason: 'INTERNAL_ERROR',
+            authenticated: false,
+            failureCode: 'BE_SESSION_LOOKUP_FAILED',
+            recoveryHint: 'retry_auth_bootstrap',
+            retryable: true,
+            runtimeBoundary: 'backend_session',
+        ), 500, $correlationId);
     }
 
     private function decorateResponse(JsonResponse $response, string $correlationId): void
@@ -133,6 +142,21 @@ class SessionMiddleware
         return is_string($headerCorrelationId) && $headerCorrelationId !== ''
             ? $headerCorrelationId
             : (string) Str::uuid();
+    }
+
+    private function resolveSessionToken(Request $request): ?string
+    {
+        $bearerToken = $request->bearerToken();
+
+        if (is_string($bearerToken) && trim($bearerToken) !== '') {
+            return trim($bearerToken);
+        }
+
+        $sessionCookie = $request->cookie('__session');
+
+        return is_string($sessionCookie) && $sessionCookie !== ''
+            ? $sessionCookie
+            : null;
     }
 
     private function bestEffortDelete(

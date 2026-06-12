@@ -12,6 +12,8 @@ final class MutationEvent
         public readonly string $aggregateId,
         public readonly string $workspaceId,
         public readonly string $correlationId,
+        public readonly ?string $mutationId = null,
+        public readonly ?string $replayGroupId = null,
         public readonly array $payload = [],
     ) {
     }
@@ -23,9 +25,11 @@ final class MutationEvent
         string $projectId,
         string $workspaceId,
         string $correlationId,
+        ?string $mutationId = null,
+        ?string $replayGroupId = null,
         array $payload = [],
     ): self {
-        return new self('ProjectCreated', $projectId, $workspaceId, $correlationId, $payload);
+        return new self('ProjectCreated', $projectId, $workspaceId, $correlationId, $mutationId, $replayGroupId, $payload);
     }
 
     /**
@@ -35,9 +39,11 @@ final class MutationEvent
         string $projectId,
         string $workspaceId,
         string $correlationId,
+        ?string $mutationId = null,
+        ?string $replayGroupId = null,
         array $payload = [],
     ): self {
-        return new self('ProjectArchived', $projectId, $workspaceId, $correlationId, $payload);
+        return new self('ProjectArchived', $projectId, $workspaceId, $correlationId, $mutationId, $replayGroupId, $payload);
     }
 
     /**
@@ -47,9 +53,11 @@ final class MutationEvent
         string $projectId,
         string $workspaceId,
         string $correlationId,
+        ?string $mutationId = null,
+        ?string $replayGroupId = null,
         array $payload = [],
     ): self {
-        return new self('ProjectCompleted', $projectId, $workspaceId, $correlationId, $payload);
+        return new self('ProjectCompleted', $projectId, $workspaceId, $correlationId, $mutationId, $replayGroupId, $payload);
     }
 
     /**
@@ -59,9 +67,11 @@ final class MutationEvent
         string $projectId,
         string $workspaceId,
         string $correlationId,
+        ?string $mutationId = null,
+        ?string $replayGroupId = null,
         array $payload = [],
     ): self {
-        return new self('ProjectReopened', $projectId, $workspaceId, $correlationId, $payload);
+        return new self('ProjectReopened', $projectId, $workspaceId, $correlationId, $mutationId, $replayGroupId, $payload);
     }
 
     /**
@@ -71,9 +81,11 @@ final class MutationEvent
         string $taskId,
         string $workspaceId,
         string $correlationId,
+        ?string $mutationId = null,
+        ?string $replayGroupId = null,
         array $payload = [],
     ): self {
-        return new self('TaskCreated', $taskId, $workspaceId, $correlationId, $payload);
+        return new self('TaskCreated', $taskId, $workspaceId, $correlationId, $mutationId, $replayGroupId, $payload);
     }
 
     /**
@@ -83,9 +95,11 @@ final class MutationEvent
         string $taskId,
         string $workspaceId,
         string $correlationId,
+        ?string $mutationId = null,
+        ?string $replayGroupId = null,
         array $payload = [],
     ): self {
-        return new self('TaskCompleted', $taskId, $workspaceId, $correlationId, $payload);
+        return new self('TaskCompleted', $taskId, $workspaceId, $correlationId, $mutationId, $replayGroupId, $payload);
     }
 
     /**
@@ -95,8 +109,10 @@ final class MutationEvent
         string $taskId,
         string $workspaceId,
         string $correlationId,
+        ?string $mutationId = null,
+        ?string $replayGroupId = null,
         array $payload = [],
     ): self {
-        return new self('TaskReopened', $taskId, $workspaceId, $correlationId, $payload);
+        return new self('TaskReopened', $taskId, $workspaceId, $correlationId, $mutationId, $replayGroupId, $payload);
     }
 }

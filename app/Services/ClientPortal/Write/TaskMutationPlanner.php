@@ -80,6 +80,8 @@ final class TaskMutationPlanner
                     taskId: $taskId,
                     workspaceId: $workspace->workspaceId,
                     correlationId: $command->metadata->correlationId,
+                    mutationId: $command->metadata->mutationId,
+                    replayGroupId: $command->metadata->replayGroupId,
                     payload: [
                         'project_id' => $project->id,
                         'title' => $command->title,
@@ -149,6 +151,8 @@ final class TaskMutationPlanner
                 taskId: $task->id,
                 workspaceId: $workspace->workspaceId,
                 correlationId: $command->metadata->correlationId,
+                mutationId: $command->metadata->mutationId,
+                replayGroupId: $command->metadata->replayGroupId,
                 payload: [
                     'project_id' => $project->id,
                     'actor_id' => $command->metadata->actorId,
@@ -165,6 +169,8 @@ final class TaskMutationPlanner
                 taskId: $task->id,
                 workspaceId: $workspace->workspaceId,
                 correlationId: $command->metadata->correlationId,
+                mutationId: $command->metadata->mutationId,
+                replayGroupId: $command->metadata->replayGroupId,
                 payload: [
                     'project_id' => $project->id,
                     'actor_id' => $command->metadata->actorId,

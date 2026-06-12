@@ -65,10 +65,23 @@ final class TaskMutationHandler
         $existingReservation = $this->idempotency->find($scope, $key);
 
         if ($existingReservation !== null) {
+            $this->logger->info('be.mutation.idempotency.lookup', [
+                'scope' => $scope,
+                'aggregate_id' => $existingReservation->aggregateId,
+                'status' => $existingReservation->status,
+            ]);
+
             return $this->resolveExistingIdempotency($existingReservation, $requestHash);
         }
 
-        if (! $this->idempotency->reserve($scope, $key, $requestHash)) {
+        if (! $this->idempotency->reserve(
+            $scope,
+            $key,
+            $requestHash,
+            $command->metadata->correlationId,
+            $command->metadata->mutationId,
+            $command->metadata->replayGroupId,
+        )) {
             $existingReservation = $this->idempotency->find($scope, $key);
 
             if ($existingReservation !== null) {
@@ -83,11 +96,25 @@ final class TaskMutationHandler
         if (! $decision->accepted() || ! $decision->plan instanceof MutationPlan) {
             $this->idempotency->release($scope, $key);
 
+            $this->logger->warning('be.mutation.validation_failed', [
+                'scope' => $scope,
+                'violation_codes' => array_map(
+                    static fn ($violation): string => $violation->code,
+                    $decision->violations,
+                ),
+            ]);
+
             return TaskStatusMutationExecution::validationFailed($decision->violations);
         }
 
         if ($command->metadata->expectedVersion !== $task->version) {
             $this->idempotency->release($scope, $key);
+
+            $this->logger->warning('be.mutation.stale_write', [
+                'scope' => $scope,
+                'expected_version' => $command->metadata->expectedVersion,
+                'current_version' => $task->version,
+            ]);
 
             return TaskStatusMutationExecution::conflict('STALE_WRITE', [
                 'expectedVersion' => $command->metadata->expectedVersion,
@@ -159,12 +186,27 @@ final class TaskMutationHandler
                     aggregateId: $updatedTask->id,
                     responseStatus: 200,
                     responsePayload: $result->toArray(),
+                    correlationId: $command->metadata->correlationId,
+                    mutationId: $command->metadata->mutationId,
+                    replayGroupId: $command->metadata->replayGroupId,
                 );
+
+                $this->logger->info('be.mutation.persist.success', [
+                    'aggregate_id' => $updatedTask->id,
+                    'response_status' => 200,
+                ]);
 
                 return TaskStatusMutationExecution::success($result);
             });
         } catch (StaleWriteException $exception) {
             $this->idempotency->release($scope, $key);
+
+            $this->logger->warning('be.mutation.stale_write', [
+                'scope' => $scope,
+                'aggregate_id' => $exception->aggregateId,
+                'expected_version' => $exception->expectedVersion,
+                'current_version' => $exception->currentVersion,
+            ]);
 
             return TaskStatusMutationExecution::conflict('STALE_WRITE', [
                 'aggregateId' => $exception->aggregateId,
@@ -189,15 +231,31 @@ final class TaskMutationHandler
         string $requestHash,
     ): TaskStatusMutationExecution {
         if ($record->requestHash !== $requestHash) {
+            $this->logger->warning('be.mutation.idempotency.conflict', [
+                'scope' => $record->scope,
+                'reason' => 'IDEMPOTENCY_KEY_REUSED',
+            ]);
+
             return TaskStatusMutationExecution::conflict('IDEMPOTENCY_KEY_REUSED');
         }
 
         if ($record->completed() && is_array($record->responsePayload)) {
+            $this->logger->info('be.mutation.idempotency.replay', [
+                'scope' => $record->scope,
+                'aggregate_id' => $record->aggregateId,
+                'response_status' => $record->responseStatus,
+            ]);
+
             return TaskStatusMutationExecution::success(
                 TaskStatusMutationResult::fromArray($record->responsePayload),
                 replayed: true,
             );
         }
+
+        $this->logger->warning('be.mutation.idempotency.conflict', [
+            'scope' => $record->scope,
+            'reason' => 'IDEMPOTENCY_IN_PROGRESS',
+        ]);
 
         return TaskStatusMutationExecution::conflict('IDEMPOTENCY_IN_PROGRESS');
     }

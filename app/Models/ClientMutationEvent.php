@@ -23,6 +23,8 @@ class ClientMutationEvent extends Model
         'actor_id',
         'actor_email',
         'correlation_id',
+        'mutation_id',
+        'replay_group_id',
         'payload',
     ];
 

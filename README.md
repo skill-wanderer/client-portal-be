@@ -40,7 +40,8 @@ Workflow semantics currently enforced:
 
 | Service | Purpose | Host access | Notes |
 | --- | --- | --- | --- |
-| `backend-app` | Laravel API runtime | `http://127.0.0.1:8003` | Health-checked through `/up` |
+| `backend-app` | Laravel API runtime | `http://127.0.0.1:8000` | Dedicated loopback-only origin for Cloudflare Tunnel |
+| `backend-app` | Laravel API runtime | `http://127.0.0.1:8003` | Loopback-only local development origin |
 | `postgres` | Canonical persistence runtime | `127.0.0.1:15432` | PostgreSQL 18 with the named volume `client-portal-be-postgres18-data` |
 | `redis` | Session and cache infrastructure | `127.0.0.1:16379` | Uses the named volume `client-portal-be-redis-data` and must keep `REDIS_CLIENT=predis` |
 
@@ -57,6 +58,7 @@ Compose hardening that is now part of the runtime contract:
 - trusted proxy handling is enabled through `TRUSTED_PROXIES`
 - auth cookies inherit path, domain, same-site, and secure behavior from the runtime session policy
 - local CORS defaults allow both `http://127.0.0.1:3000` and `http://localhost:3000`
+- all published Docker ports are loopback-only, so Cloudflare Tunnel is the intended public ingress path
 
 ## Prerequisites
 
@@ -89,6 +91,41 @@ Cloudflare compatibility assumptions now validated in code and runtime:
 - HTTPS detection works behind the proxy
 - login and callback cookies become `Secure` under forwarded HTTPS
 - local HTTP requests remain usable without forcing secure cookies
+
+## Cloudflare Tunnel Operations
+
+The local machine is now prepared to publish the backend through Cloudflare Tunnel without opening router ports or binding Docker services on public interfaces.
+
+Deterministic local tunnel topology:
+
+- local backend tunnel origin: `http://127.0.0.1:8000`
+- local developer backend origin: `http://127.0.0.1:8003`
+- public backend hostname: `https://api.skill-wanderer.com`
+- deployed frontend hostname: `https://client.skill-wanderer.com`
+- local tunnel name: `client-portal-api`
+- local Cloudflare config path: `C:\Users\Reltropolis\.cloudflared\config.yml`
+
+Startup sequence:
+
+1. Start Docker with `docker compose up -d`.
+2. Confirm the backend responds on `http://127.0.0.1:8000/v1/auth/me`.
+3. Start the tunnel with `cloudflared tunnel run client-portal-api`.
+4. Confirm `https://api.skill-wanderer.com/v1/auth/me` returns the expected JSON response.
+
+Restart sequence:
+
+1. Stop the tunnel process if it is running.
+2. Restart Docker services with `docker compose up -d --force-recreate backend-app` if the application config changed.
+3. Start `cloudflared tunnel run client-portal-api` again.
+
+Tunnel configuration contract:
+
+- `api.skill-wanderer.com` routes to the `client-portal-api` tunnel
+- ingress points to `http://127.0.0.1:8000`
+- fallback ingress returns `http_status:404`
+- `CORS_ALLOWED_ORIGINS` must include `https://client.skill-wanderer.com`
+
+The tunnel exposure is independent from any future Keycloak callback-domain cutover. Public API reachability and browser connectivity are ready now; identity-provider redirect changes can happen later without reopening the local network surface.
 
 ## Quick Start
 
@@ -197,10 +234,17 @@ Executable checks that passed:
 - `docker compose config`
 - `docker compose down -v`
 - `docker compose up --build -d`
+- `curl http://127.0.0.1:8000/v1/auth/me`
 - `php artisan migrate:fresh --seed`
 - `php artisan test`
 - `php artisan test tests/Feature/CloudflareDeploymentHardeningTest.php`
 - `php artisan test tests/Feature/ClientTaskCreateApiTest.php tests/Feature/ClientTaskStatusMutationApiTest.php tests/Feature/ClientProjectTasksApiTest.php`
+- `cloudflared tunnel list`
+- `cloudflared tunnel create client-portal-api`
+- `cloudflared tunnel route dns client-portal-api api.skill-wanderer.com`
+- `cloudflared tunnel ingress validate`
+- `curl https://api.skill-wanderer.com/v1/auth/me`
+- `curl -H "Origin: https://client.skill-wanderer.com" https://api.skill-wanderer.com/v1/auth/me`
 
 Observed results:
 
@@ -221,6 +265,8 @@ Live runtime validation also passed for:
 
 - `GET /v1/auth/login` returning a redirect with a `Secure` state cookie under forwarded HTTPS
 - invalid `GET /v1/auth/callback` requests returning a `400` that expires the state cookie with the same secure policy under forwarded HTTPS
+- `GET /v1/auth/me` on `https://api.skill-wanderer.com` through Cloudflare Tunnel returning the expected `401` JSON response
+- browser-origin requests from `https://client.skill-wanderer.com` reaching `https://api.skill-wanderer.com` without a CORS failure
 - `GET /v1/auth/me`
 - authenticated workspace project reads on the canonical runtime
 - task creation on the onboarding project
@@ -258,6 +304,9 @@ Use this when validating the workflow layer outside PHPUnit:
 - If login redirects generate the wrong callback scheme or host, align `APP_URL` and `KEYCLOAK_REDIRECT_URI` with the public HTTPS backend origin.
 - If cookies are missing behind Cloudflare or another proxy, confirm `TRUSTED_PROXIES` matches the ingress hop and that `SESSION_SECURE_COOKIE` is not forcing an insecure value.
 - If browser requests fail CORS, confirm `CORS_ALLOWED_ORIGINS` contains the exact frontend origin, including scheme and port.
+- If `cloudflared` is installed but the current PowerShell window cannot find it, open a fresh shell or run `C:\Program Files (x86)\cloudflared\cloudflared.exe` directly until PATH refreshes.
+- If `https://api.skill-wanderer.com` fails while the tunnel is down, restart `cloudflared tunnel run client-portal-api`; the hostname is expected to depend on the local tunnel process.
+- If the tunnel is connected but the public hostname still fails, confirm `cloudflared tunnel info client-portal-api` shows active edge connections and that `http://127.0.0.1:8000/v1/auth/me` still returns JSON locally.
 
 ## Engineering Guardrails
 
@@ -265,6 +314,7 @@ Use this when validating the workflow layer outside PHPUnit:
 - Keep `REDIS_CLIENT=predis`. The `phpredis` extension is not available in this workspace.
 - Do not force `SESSION_SECURE_COOKIE=false` in a reverse-proxied HTTPS deployment.
 - Treat `TRUSTED_PROXIES`, `APP_URL`, `FRONTEND_APP_URL`, and `CORS_ALLOWED_ORIGINS` as one deployment surface; change them together.
+- Keep Docker port bindings loopback-only and use Cloudflare Tunnel as the only public ingress path.
 - Do not reintroduce SQLite defaults in `.env`, `.env.example`, `config/database.php`, `composer.json`, or `phpunit.xml`.
 - Do not recreate `database/database.sqlite` or any parallel SQLite bootstrap path.
 - Preserve database-backed idempotency, durable event persistence, and rollback guarantees when changing write flows.

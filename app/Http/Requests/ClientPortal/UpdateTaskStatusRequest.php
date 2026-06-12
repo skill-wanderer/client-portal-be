@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\ClientPortal;
 
+use App\Http\Middleware\RequestContextMiddleware;
 use App\Support\Api\ApiResponse;
 use App\Support\Api\Contracts\ErrorData;
 use Illuminate\Contracts\Validation\Validator;
@@ -32,10 +33,16 @@ class UpdateTaskStatusRequest extends FormRequest
 
     protected function failedValidation(Validator $validator): void
     {
-        $headerCorrelationId = $this->header('X-Correlation-ID');
-        $correlationId = is_string($headerCorrelationId) && $headerCorrelationId !== ''
-            ? $headerCorrelationId
-            : (string) Str::uuid();
+        $attributeCorrelationId = $this->attributes->get(RequestContextMiddleware::CORRELATION_ID_ATTRIBUTE);
+
+        if (is_string($attributeCorrelationId) && $attributeCorrelationId !== '') {
+            $correlationId = $attributeCorrelationId;
+        } else {
+            $headerCorrelationId = $this->header('X-Correlation-ID');
+            $correlationId = is_string($headerCorrelationId) && $headerCorrelationId !== ''
+                ? $headerCorrelationId
+                : (string) Str::uuid();
+        }
 
         throw new HttpResponseException(ApiResponse::error(
             new ErrorData(

@@ -2,8 +2,8 @@
 
 $baseUrl = rtrim((string) env('KEYCLOAK_BASE_URL', 'https://sso.skill-wanderer.com'), '/');
 $realm = (string) env('KEYCLOAK_REALM', 'client-portal');
-$backendUrl = rtrim((string) env('APP_URL', 'http://127.0.0.1:8003'), '/');
-$frontendUrl = rtrim((string) env('FRONTEND_APP_URL', 'http://127.0.0.1:3000'), '/');
+$backendUrl = rtrim((string) env('APP_URL', ''), '/');
+$frontendUrl = rtrim((string) env('FRONTEND_APP_URL', ''), '/');
 
 return [
     'base_url' => $baseUrl,
@@ -11,7 +11,7 @@ return [
     'issuer' => env('KEYCLOAK_ISSUER', $baseUrl.'/realms/'.$realm),
     'client_id' => env('KEYCLOAK_CLIENT_ID', 'client-portal-fe'),
     'client_secret' => env('KEYCLOAK_CLIENT_SECRET', ''),
-    'redirect_uri' => env('KEYCLOAK_REDIRECT_URI', $backendUrl.'/v1/auth/callback'),
+    'redirect_uri' => env('KEYCLOAK_REDIRECT_URI', $backendUrl !== '' ? $backendUrl.'/v1/auth/callback' : ''),
     'authorization_endpoint' => env(
         'KEYCLOAK_AUTHORIZATION_ENDPOINT',
         $baseUrl.'/realms/'.$realm.'/protocol/openid-connect/auth'
@@ -22,7 +22,7 @@ return [
     ),
     'frontend_dashboard_url' => env(
         'KEYCLOAK_FRONTEND_DASHBOARD_URL',
-        $frontendUrl.'/dashboard'
+        $frontendUrl !== '' ? $frontendUrl.'/dashboard' : ''
     ),
     'timeout' => (int) env('KEYCLOAK_TIMEOUT', 10),
     'response_type' => 'code',

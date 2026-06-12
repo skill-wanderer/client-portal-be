@@ -50,6 +50,8 @@ final class ProjectWorkflowCoordinator
                     projectId: $project->id,
                     workspaceId: $project->workspaceId,
                     correlationId: $commandMetadata->correlationId,
+                    mutationId: $commandMetadata->mutationId,
+                    replayGroupId: $commandMetadata->replayGroupId,
                     payload: [
                         'actor_id' => $commandMetadata->actorId,
                         'actor_email' => $commandMetadata->actorEmail,
@@ -79,6 +81,8 @@ final class ProjectWorkflowCoordinator
                     projectId: $project->id,
                     workspaceId: $project->workspaceId,
                     correlationId: $commandMetadata->correlationId,
+                    mutationId: $commandMetadata->mutationId,
+                    replayGroupId: $commandMetadata->replayGroupId,
                     payload: [
                         'actor_id' => $commandMetadata->actorId,
                         'actor_email' => $commandMetadata->actorEmail,

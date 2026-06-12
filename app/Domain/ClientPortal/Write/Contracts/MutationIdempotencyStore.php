@@ -8,7 +8,14 @@ interface MutationIdempotencyStore
 {
     public function find(string $scope, string $key): ?MutationIdempotencyRecord;
 
-    public function reserve(string $scope, string $key, string $requestHash): bool;
+    public function reserve(
+        string $scope,
+        string $key,
+        string $requestHash,
+        ?string $correlationId = null,
+        ?string $mutationId = null,
+        ?string $replayGroupId = null,
+    ): bool;
 
     /**
      * @param array<string, mixed> $responsePayload
@@ -19,6 +26,9 @@ interface MutationIdempotencyStore
         string $aggregateId,
         int $responseStatus,
         array $responsePayload,
+        ?string $correlationId = null,
+        ?string $mutationId = null,
+        ?string $replayGroupId = null,
     ): void;
 
     public function release(string $scope, string $key): void;

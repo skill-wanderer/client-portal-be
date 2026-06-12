@@ -25,8 +25,9 @@ use App\Support\Api\Contracts\PaginationMeta;
 use App\Support\Api\Query\ListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Psr\Log\LoggerInterface;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
+use Psr\Log\LoggerInterface;
 
 class ClientTaskController extends Controller
 {
@@ -112,7 +113,19 @@ class ClientTaskController extends Controller
         string $taskId,
     ): JsonResponse {
         $correlationId = $this->resolveCorrelationId($request) ?? (string) Str::uuid();
+        $mutationId = (string) Str::uuid();
+        $replayGroupId = $this->buildReplayGroupId(
+            'task.status.update',
+            $projectId,
+            $taskId,
+            (string) $request->input('idempotencyKey'),
+        );
         $session = $request->attributes->get(SessionMiddleware::REQUEST_ATTRIBUTE);
+
+        Log::withContext([
+            'mutation_id' => $mutationId,
+            'replay_group_id' => $replayGroupId,
+        ]);
 
         if (! $session instanceof SessionData) {
             $this->logger->error('tasks.status.internal_error', [
@@ -122,14 +135,14 @@ class ClientTaskController extends Controller
                 'task_id' => $taskId,
             ]);
 
-            return ApiResponse::error(
+            return $this->decorateMutationResponse(ApiResponse::error(
                 new ErrorData(
                     code: 'internal_error',
                     message: 'The task status session context is unavailable.',
                 ),
                 500,
                 $correlationId,
-            );
+            ), $mutationId, $replayGroupId);
         }
 
         $command = new UpdateTaskStatusCommand(
@@ -140,6 +153,8 @@ class ClientTaskController extends Controller
                 actorId: $session->userSub,
                 actorEmail: $session->userEmail,
                 correlationId: $correlationId,
+                mutationId: $mutationId,
+                replayGroupId: $replayGroupId,
                 idempotencyKey: (string) $request->input('idempotencyKey'),
                 expectedVersion: (int) $request->integer('expectedVersion'),
             ),
@@ -148,7 +163,7 @@ class ClientTaskController extends Controller
         $execution = $this->taskMutationHandler->updateStatus($command);
 
         if ($execution->state === 'not_found') {
-            return ApiResponse::error(
+            return $this->decorateMutationResponse(ApiResponse::error(
                 new ErrorData(
                     code: 'project_not_found',
                     message: 'The requested project could not be found.',
@@ -156,11 +171,11 @@ class ClientTaskController extends Controller
                 ),
                 404,
                 $correlationId,
-            );
+            ), $mutationId, $replayGroupId);
         }
 
         if ($execution->state === 'validation_failed') {
-            return ApiResponse::error(
+            return $this->decorateMutationResponse(ApiResponse::error(
                 new ErrorData(
                     code: 'validation_error',
                     message: 'The task status mutation could not be applied.',
@@ -178,11 +193,11 @@ class ClientTaskController extends Controller
                 ),
                 422,
                 $correlationId,
-            );
+            ), $mutationId, $replayGroupId);
         }
 
         if ($execution->state === 'conflict') {
-            return ApiResponse::error(
+            return $this->decorateMutationResponse(ApiResponse::error(
                 new ErrorData(
                     code: 'conflict',
                     message: $this->conflictMessage($execution->reason),
@@ -191,24 +206,24 @@ class ClientTaskController extends Controller
                 ),
                 409,
                 $correlationId,
-            );
+            ), $mutationId, $replayGroupId);
         }
 
         if (! $execution->successful()) {
-            return ApiResponse::error(
+            return $this->decorateMutationResponse(ApiResponse::error(
                 new ErrorData(
                     code: 'internal_error',
                     message: 'The task status mutation could not be completed.',
                 ),
                 500,
                 $correlationId,
-            );
+            ), $mutationId, $replayGroupId);
         }
 
-        $response = ApiResponse::success(
+        $response = $this->decorateMutationResponse(ApiResponse::success(
             TaskStatusMutationData::fromDomain($execution->result),
             correlationId: $correlationId,
-        );
+        ), $mutationId, $replayGroupId);
 
         if ($execution->replayed) {
             $response->headers->set('X-Idempotent-Replay', 'true');
@@ -220,7 +235,18 @@ class ClientTaskController extends Controller
     public function store(CreateTaskRequest $request, string $projectId): JsonResponse
     {
         $correlationId = $this->resolveCorrelationId($request) ?? (string) Str::uuid();
+        $mutationId = (string) Str::uuid();
+        $replayGroupId = $this->buildReplayGroupId(
+            'task.create',
+            $projectId,
+            (string) $request->input('idempotencyKey'),
+        );
         $session = $request->attributes->get(SessionMiddleware::REQUEST_ATTRIBUTE);
+
+        Log::withContext([
+            'mutation_id' => $mutationId,
+            'replay_group_id' => $replayGroupId,
+        ]);
 
         if (! $session instanceof SessionData) {
             $this->logger->error('tasks.create.internal_error', [
@@ -229,14 +255,14 @@ class ClientTaskController extends Controller
                 'project_id' => $projectId,
             ]);
 
-            return ApiResponse::error(
+            return $this->decorateMutationResponse(ApiResponse::error(
                 new ErrorData(
                     code: 'internal_error',
                     message: 'The task creation session context is unavailable.',
                 ),
                 500,
                 $correlationId,
-            );
+            ), $mutationId, $replayGroupId);
         }
 
         $command = new CreateTaskCommand(
@@ -252,6 +278,8 @@ class ClientTaskController extends Controller
                 actorId: $session->userSub,
                 actorEmail: $session->userEmail,
                 correlationId: $correlationId,
+                mutationId: $mutationId,
+                replayGroupId: $replayGroupId,
                 idempotencyKey: (string) $request->input('idempotencyKey'),
             ),
         );
@@ -259,7 +287,7 @@ class ClientTaskController extends Controller
         $execution = $this->taskCreationHandler->create($command);
 
         if ($execution->state === 'not_found') {
-            return ApiResponse::error(
+            return $this->decorateMutationResponse(ApiResponse::error(
                 new ErrorData(
                     code: 'project_not_found',
                     message: 'The requested project could not be found.',
@@ -267,11 +295,11 @@ class ClientTaskController extends Controller
                 ),
                 404,
                 $correlationId,
-            );
+            ), $mutationId, $replayGroupId);
         }
 
         if ($execution->state === 'validation_failed') {
-            return ApiResponse::error(
+            return $this->decorateMutationResponse(ApiResponse::error(
                 new ErrorData(
                     code: 'validation_error',
                     message: 'The task creation could not be applied.',
@@ -289,11 +317,11 @@ class ClientTaskController extends Controller
                 ),
                 422,
                 $correlationId,
-            );
+            ), $mutationId, $replayGroupId);
         }
 
         if ($execution->state === 'conflict') {
-            return ApiResponse::error(
+            return $this->decorateMutationResponse(ApiResponse::error(
                 new ErrorData(
                     code: 'conflict',
                     message: $this->conflictMessage($execution->reason),
@@ -302,25 +330,25 @@ class ClientTaskController extends Controller
                 ),
                 409,
                 $correlationId,
-            );
+            ), $mutationId, $replayGroupId);
         }
 
         if (! $execution->successful()) {
-            return ApiResponse::error(
+            return $this->decorateMutationResponse(ApiResponse::error(
                 new ErrorData(
                     code: 'internal_error',
                     message: 'The task creation could not be completed.',
                 ),
                 500,
                 $correlationId,
-            );
+            ), $mutationId, $replayGroupId);
         }
 
-        $response = ApiResponse::success(
+        $response = $this->decorateMutationResponse(ApiResponse::success(
             TaskCreationData::fromDomain($execution->result),
             201,
             $correlationId,
-        );
+        ), $mutationId, $replayGroupId);
 
         if ($execution->replayed) {
             $response->headers->set('X-Idempotent-Replay', 'true');
@@ -352,5 +380,21 @@ class ClientTaskController extends Controller
             'IDEMPOTENCY_IN_PROGRESS' => 'The task mutation is already being processed.',
             default => 'The task mutation could not be completed due to a conflict.',
         };
+    }
+
+    private function decorateMutationResponse(
+        JsonResponse $response,
+        string $mutationId,
+        string $replayGroupId,
+    ): JsonResponse {
+        $response->headers->set('X-Mutation-ID', $mutationId);
+        $response->headers->set('X-Replay-Group-ID', $replayGroupId);
+
+        return $response;
+    }
+
+    private function buildReplayGroupId(string $operation, string ...$parts): string
+    {
+        return hash('sha256', implode('|', array_merge([$operation], $parts)));
     }
 }

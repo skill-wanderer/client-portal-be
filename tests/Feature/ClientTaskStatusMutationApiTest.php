@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Domain\ClientPortal\Write\Contracts\MutationEventRecorder;
+use App\Models\ClientMutationEvent;
+use App\Models\ClientMutationIdempotency;
 use App\Models\ClientProject;
 use App\Models\ClientTask;
 use App\Services\Session\SessionData;
@@ -10,6 +12,7 @@ use App\Services\Session\SessionService;
 use Carbon\CarbonImmutable;
 use Database\Seeders\ClientPortalReadModelSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Str;
 use Mockery;
 use RuntimeException;
@@ -27,11 +30,12 @@ class ClientTaskStatusMutationApiTest extends TestCase
     {
         $projectId = $this->ownedProjectId('user-123');
         $taskId = $projectId.'-task-scope';
+        $idempotencyKey = '11111111-1111-4111-8111-111111111111';
 
         $response = $this->authenticatedRequest($projectId, $taskId, [
             'status' => 'done',
             'expectedVersion' => 1,
-            'idempotencyKey' => (string) Str::uuid(),
+            'idempotencyKey' => $idempotencyKey,
         ]);
 
         $response->assertOk()->assertJson([
@@ -62,8 +66,13 @@ class ClientTaskStatusMutationApiTest extends TestCase
             ],
         ]);
 
+        $replayGroupId = $this->statusReplayGroupId($projectId, $taskId, $idempotencyKey);
+        $mutationId = $this->assertMutationHeaders($response, $replayGroupId);
+
         $project = ClientProject::query()->findOrFail($projectId);
         $task = ClientTask::query()->findOrFail($taskId);
+        $event = ClientMutationEvent::query()->sole();
+        $idempotencyRecord = ClientMutationIdempotency::query()->sole();
 
         $this->assertSame(12, $project->completed_task_count);
         $this->assertSame(18, $project->active_task_count);
@@ -71,12 +80,19 @@ class ClientTaskStatusMutationApiTest extends TestCase
         $this->assertSame('done', $task->status);
         $this->assertSame(2, $task->version);
         $this->assertNotNull($task->completed_at);
+        $this->assertSame($mutationId, $event->mutation_id);
+        $this->assertSame($replayGroupId, $event->replay_group_id);
+        $this->assertSame($mutationId, $idempotencyRecord->mutation_id);
+        $this->assertSame($replayGroupId, $idempotencyRecord->replay_group_id);
+        $this->assertNotNull($idempotencyRecord->correlation_id);
 
         $this->assertDatabaseHas('client_mutation_events', [
             'name' => 'TaskCompleted',
             'aggregate_id' => $taskId,
             'workspace_id' => $this->workspaceId('user-123'),
             'actor_id' => 'user-123',
+            'mutation_id' => $mutationId,
+            'replay_group_id' => $replayGroupId,
         ]);
 
         $this->assertDatabaseHas('client_mutation_idempotency', [
@@ -84,6 +100,8 @@ class ClientTaskStatusMutationApiTest extends TestCase
             'status' => 'completed',
             'aggregate_id' => $taskId,
             'response_status' => 200,
+            'mutation_id' => $mutationId,
+            'replay_group_id' => $replayGroupId,
         ]);
     }
 
@@ -149,6 +167,7 @@ class ClientTaskStatusMutationApiTest extends TestCase
     {
         $projectId = $this->ownedProjectId('user-123');
         $taskId = $projectId.'-task-scope';
+        $staleWriteKey = '22222222-2222-4222-8222-222222222222';
 
         $this->authenticatedRequest($projectId, $taskId, [
             'status' => 'done',
@@ -159,7 +178,7 @@ class ClientTaskStatusMutationApiTest extends TestCase
         $response = $this->authenticatedRequest($projectId, $taskId, [
             'status' => 'todo',
             'expectedVersion' => 1,
-            'idempotencyKey' => (string) Str::uuid(),
+            'idempotencyKey' => $staleWriteKey,
         ]);
 
         $response->assertStatus(409)->assertJson([
@@ -170,6 +189,11 @@ class ClientTaskStatusMutationApiTest extends TestCase
                 'reason' => 'STALE_WRITE',
             ],
         ]);
+
+        $this->assertMutationHeaders(
+            $response,
+            $this->statusReplayGroupId($projectId, $taskId, $staleWriteKey),
+        );
     }
 
     public function test_task_status_rejects_illegal_transition_with_validation_error(): void
@@ -233,11 +257,16 @@ class ClientTaskStatusMutationApiTest extends TestCase
 
         $firstResponse->assertOk();
         $secondResponse->assertOk();
+        $replayGroupId = $this->statusReplayGroupId($projectId, $taskId, $idempotencyKey);
+        $firstMutationId = $this->assertMutationHeaders($firstResponse, $replayGroupId);
+        $secondMutationId = $this->assertMutationHeaders($secondResponse, $replayGroupId);
+        $secondResponse->assertHeader('X-Idempotent-Replay', 'true');
         $this->assertSame($firstResponse->json('data'), $secondResponse->json('data'));
+        $this->assertNotSame($firstMutationId, $secondMutationId);
         $this->assertNotNull(ClientTask::query()->findOrFail($taskId)->completed_at);
         $this->assertSame(2, ClientTask::query()->findOrFail($taskId)->version);
-        $this->assertSame(1, \App\Models\ClientMutationEvent::query()->count());
-        $this->assertSame(1, \App\Models\ClientMutationIdempotency::query()->count());
+        $this->assertSame(1, ClientMutationEvent::query()->count());
+        $this->assertSame(1, ClientMutationIdempotency::query()->count());
     }
 
     public function test_final_active_task_completion_auto_completes_project_and_ignores_archived_tasks(): void
@@ -557,6 +586,30 @@ class ClientTaskStatusMutationApiTest extends TestCase
     private function statusScope(string $projectId, string $taskId): string
     {
         return 'task.status.update:'.$this->workspaceId('user-123').':'.$projectId.':'.$taskId;
+    }
+
+    private function statusReplayGroupId(string $projectId, string $taskId, string $idempotencyKey): string
+    {
+        return hash('sha256', implode('|', [
+            'task.status.update',
+            $projectId,
+            $taskId,
+            $idempotencyKey,
+        ]));
+    }
+
+    private function assertMutationHeaders(TestResponse $response, string $expectedReplayGroupId): string
+    {
+        $response->assertHeader('X-Mutation-ID');
+        $response->assertHeader('X-Replay-Group-ID', $expectedReplayGroupId);
+        $response->assertHeader('X-Correlation-ID');
+
+        $mutationId = $response->headers->get('X-Mutation-ID');
+
+        $this->assertIsString($mutationId);
+        $this->assertNotSame('', $mutationId);
+
+        return $mutationId;
     }
 
     private function prepareProjectForFinalCompletion(

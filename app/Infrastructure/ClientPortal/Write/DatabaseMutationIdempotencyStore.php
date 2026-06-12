@@ -6,6 +6,7 @@ use App\Domain\ClientPortal\Write\Contracts\MutationIdempotencyStore;
 use App\Domain\ClientPortal\Write\Models\MutationIdempotencyRecord;
 use App\Models\ClientMutationIdempotency;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Log;
 
 final class DatabaseMutationIdempotencyStore implements MutationIdempotencyStore
 {
@@ -26,13 +27,23 @@ final class DatabaseMutationIdempotencyStore implements MutationIdempotencyStore
             key: (string) $record->idempotency_key,
             requestHash: (string) $record->request_hash,
             status: (string) $record->status,
+            correlationId: $record->correlation_id !== null ? (string) $record->correlation_id : null,
+            mutationId: $record->mutation_id !== null ? (string) $record->mutation_id : null,
+            replayGroupId: $record->replay_group_id !== null ? (string) $record->replay_group_id : null,
             aggregateId: $record->aggregate_id !== null ? (string) $record->aggregate_id : null,
             responseStatus: $record->response_status !== null ? (int) $record->response_status : null,
             responsePayload: is_array($record->response_payload) ? $record->response_payload : null,
         );
     }
 
-    public function reserve(string $scope, string $key, string $requestHash): bool
+    public function reserve(
+        string $scope,
+        string $key,
+        string $requestHash,
+        ?string $correlationId = null,
+        ?string $mutationId = null,
+        ?string $replayGroupId = null,
+    ): bool
     {
         try {
             ClientMutationIdempotency::query()->create([
@@ -40,11 +51,24 @@ final class DatabaseMutationIdempotencyStore implements MutationIdempotencyStore
                 'idempotency_key' => $key,
                 'request_hash' => $requestHash,
                 'status' => 'pending',
+                'correlation_id' => $correlationId,
+                'mutation_id' => $mutationId,
+                'replay_group_id' => $replayGroupId,
+            ]);
+
+            Log::info('be.mutation.idempotency.reserved', [
+                'scope' => $scope,
+                'idempotency_status' => 'pending',
             ]);
 
             return true;
         } catch (QueryException $exception) {
             if ($this->isUniqueViolation($exception)) {
+                Log::warning('be.mutation.idempotency.conflict', [
+                    'scope' => $scope,
+                    'reason' => 'IDEMPOTENCY_RESERVATION_FAILED',
+                ]);
+
                 return false;
             }
 
@@ -58,17 +82,29 @@ final class DatabaseMutationIdempotencyStore implements MutationIdempotencyStore
         string $aggregateId,
         int $responseStatus,
         array $responsePayload,
+        ?string $correlationId = null,
+        ?string $mutationId = null,
+        ?string $replayGroupId = null,
     ): void {
         ClientMutationIdempotency::query()
             ->where('scope', $scope)
             ->where('idempotency_key', $key)
             ->update([
                 'status' => 'completed',
+                'correlation_id' => $correlationId,
+                'mutation_id' => $mutationId,
+                'replay_group_id' => $replayGroupId,
                 'aggregate_id' => $aggregateId,
                 'response_status' => $responseStatus,
                 'response_payload' => $responsePayload,
                 'updated_at' => now(),
             ]);
+
+        Log::info('be.mutation.idempotency.completed', [
+            'scope' => $scope,
+            'aggregate_id' => $aggregateId,
+            'response_status' => $responseStatus,
+        ]);
     }
 
     public function release(string $scope, string $key): void
@@ -77,6 +113,10 @@ final class DatabaseMutationIdempotencyStore implements MutationIdempotencyStore
             ->where('scope', $scope)
             ->where('idempotency_key', $key)
             ->delete();
+
+        Log::info('be.mutation.idempotency.released', [
+            'scope' => $scope,
+        ]);
     }
 
     private function isUniqueViolation(QueryException $exception): bool

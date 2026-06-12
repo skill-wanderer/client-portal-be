@@ -2,7 +2,11 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Http\Middleware\RequestContextMiddleware;
+use App\Support\Api\ApiResponse;
+use App\Support\Api\Contracts\ErrorData;
 use App\Support\Security\AuthCookieSettings;
+use App\Support\Security\AuthStateCookieData;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -31,21 +35,36 @@ class LoginCallbackRequest extends FormRequest
 
     protected function failedValidation(Validator $validator): void
     {
-        $correlationId = $this->header('X-Correlation-ID');
-        $resolvedCorrelationId = is_string($correlationId) && $correlationId !== ''
-            ? $correlationId
-            : (string) Str::uuid();
+        $attributeCorrelationId = $this->attributes->get(RequestContextMiddleware::CORRELATION_ID_ATTRIBUTE);
 
-        $response = response()->json([
-            'message' => 'Missing required auth callback parameters.',
-            'code' => 'invalid_request',
-            'correlation_id' => $resolvedCorrelationId,
-            'errors' => $validator->errors(),
-        ], 400);
+        if (is_string($attributeCorrelationId) && $attributeCorrelationId !== '') {
+            $resolvedCorrelationId = $attributeCorrelationId;
+        } else {
+            $correlationId = $this->header('X-Correlation-ID');
 
-        $response->headers->set('Cache-Control', 'no-store');
-        $response->headers->set('Pragma', 'no-cache');
-        $response->headers->set('X-Correlation-ID', $resolvedCorrelationId);
+            if (is_string($correlationId) && $correlationId !== '') {
+                $resolvedCorrelationId = $correlationId;
+            } else {
+                $stateCookieCorrelationId = AuthStateCookieData::decode($this->cookie('__state'))?->correlationId;
+                $resolvedCorrelationId = is_string($stateCookieCorrelationId) && $stateCookieCorrelationId !== ''
+                    ? $stateCookieCorrelationId
+                    : (string) Str::uuid();
+            }
+        }
+
+        $response = ApiResponse::error(new ErrorData(
+            code: 'invalid_request',
+            message: 'Missing required auth callback parameters.',
+            reason: 'INVALID_REQUEST',
+            details: [
+                'errors' => $validator->errors()->toArray(),
+            ],
+            failureCode: 'BE_SESSION_EXPIRED',
+            recoveryHint: 'restart_auth_flow',
+            retryable: false,
+            runtimeBoundary: 'backend_auth',
+        ), 400, $resolvedCorrelationId);
+
         $response->withCookie(Cookie::create(
             name: '__state',
             value: '',

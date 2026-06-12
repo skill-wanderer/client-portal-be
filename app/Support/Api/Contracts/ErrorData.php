@@ -13,6 +13,10 @@ final class ErrorData implements ApiDataContract
         public readonly ?string $reason = null,
         public readonly ?bool $authenticated = null,
         public readonly array $details = [],
+        public readonly ?string $failureCode = null,
+        public readonly ?string $recoveryHint = null,
+        public readonly ?bool $retryable = null,
+        public readonly ?string $runtimeBoundary = null,
     ) {
     }
 
@@ -36,6 +40,22 @@ final class ErrorData implements ApiDataContract
 
         if ($this->details !== []) {
             $payload['details'] = $this->details;
+        }
+
+        if ($this->failureCode !== null) {
+            $payload['failure_code'] = $this->failureCode;
+        }
+
+        if ($this->recoveryHint !== null) {
+            $payload['recovery_hint'] = $this->recoveryHint;
+        }
+
+        if ($this->retryable !== null) {
+            $payload['retryable'] = $this->retryable;
+        }
+
+        if ($this->runtimeBoundary !== null) {
+            $payload['runtime_boundary'] = $this->runtimeBoundary;
         }
 
         return $payload;

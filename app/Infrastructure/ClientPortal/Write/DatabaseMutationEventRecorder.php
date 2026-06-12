@@ -19,7 +19,12 @@ final class DatabaseMutationEventRecorder implements MutationEventRecorder
             'actor_id' => isset($event->payload['actor_id']) ? (string) $event->payload['actor_id'] : null,
             'actor_email' => isset($event->payload['actor_email']) ? (string) $event->payload['actor_email'] : null,
             'correlation_id' => $event->correlationId,
-            'payload' => $event->payload,
+            'mutation_id' => $event->mutationId,
+            'replay_group_id' => $event->replayGroupId,
+            'payload' => array_merge($event->payload, array_filter([
+                'mutation_id' => $event->mutationId,
+                'replay_group_id' => $event->replayGroupId,
+            ], static fn (mixed $value): bool => is_string($value) && $value !== '')),
         ]);
     }
 }

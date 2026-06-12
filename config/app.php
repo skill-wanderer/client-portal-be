@@ -52,7 +52,15 @@ return [
     |
     */
 
-    'url' => env('APP_URL', 'http://127.0.0.1:8003'),
+    'url' => env('APP_URL', ''),
+
+    'frontend_app_url' => env('FRONTEND_APP_URL', ''),
+
+    'deployment_id' => env('BE_DEPLOYMENT_ID', env('APP_VERSION', 'local-dev')),
+
+    'contract_version' => env('CONTRACT_VERSION', '2026-05-21'),
+
+    'trusted_proxies' => env('TRUSTED_PROXIES', 'REMOTE_ADDR'),
 
     /*
     |--------------------------------------------------------------------------

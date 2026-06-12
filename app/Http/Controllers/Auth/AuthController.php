@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\RequestContextMiddleware;
 use App\Http\Middleware\SessionMiddleware;
 use App\Http\Requests\Auth\LoginCallbackRequest;
 use App\Http\Requests\Auth\LoginRequest;
@@ -11,7 +12,10 @@ use App\Services\Auth\Exceptions\TokenExchangeException;
 use App\Services\Auth\AuthService;
 use App\Services\Session\SessionData;
 use App\Services\Session\Exceptions\SessionPersistenceException;
+use App\Support\Api\ApiResponse;
+use App\Support\Api\Contracts\ErrorData;
 use App\Support\Security\AuthCookieSettings;
+use App\Support\Security\AuthStateCookieData;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,6 +38,8 @@ class AuthController extends Controller
 
     public function login(LoginRequest $request): RedirectResponse
     {
+        $correlationId = $this->resolveCorrelationId($request);
+        $authFlowId = $this->resolveAuthFlowId($request);
         $loginRedirect = $this->authService->beginLogin(
             returnTo: $request->validated('return_to') ?? '/',
             forceReauth: $request->boolean('force_reauth'),
@@ -43,7 +49,11 @@ class AuthController extends Controller
 
         $response->headers->set('Cache-Control', 'no-store');
         $response->headers->set('Pragma', 'no-cache');
-        $response->withCookie($this->makeStateCookie($loginRedirect->state));
+        $response->withCookie($this->makeStateCookie(new AuthStateCookieData(
+            state: $loginRedirect->state,
+            correlationId: $correlationId,
+            authFlowId: $authFlowId,
+        )));
 
         return $response;
     }
@@ -51,13 +61,13 @@ class AuthController extends Controller
     public function callback(LoginCallbackRequest $request): RedirectResponse|JsonResponse
     {
         $correlationId = $this->resolveCorrelationId($request);
-        $stateCookie = $request->cookie(self::STATE_COOKIE_NAME);
+        $stateCookie = AuthStateCookieData::decode($request->cookie(self::STATE_COOKIE_NAME));
 
         try {
             $callbackRedirect = $this->authService->completeLogin(
                 code: (string) $request->validated('code'),
                 state: (string) $request->validated('state'),
-                stateCookie: $stateCookie,
+                stateCookie: $stateCookie?->state,
                 issuer: $request->validated('iss'),
                 correlationId: $correlationId,
             );
@@ -153,11 +163,14 @@ class AuthController extends Controller
         string $message,
         string $correlationId,
     ): JsonResponse {
-        $response = response()->json([
-            'message' => $message,
-            'code' => $code,
-            'correlation_id' => $correlationId,
-        ], $status);
+        $response = ApiResponse::error(new ErrorData(
+            code: $code,
+            message: $message,
+            failureCode: $this->callbackFailureCode($code),
+            recoveryHint: $this->callbackRecoveryHint($code),
+            retryable: $this->callbackRetryable($code),
+            runtimeBoundary: 'backend_auth',
+        ), $status, $correlationId);
 
         $this->decorateCallbackResponse($response, $correlationId);
         $response->withCookie($this->expireStateCookie());
@@ -189,11 +202,11 @@ class AuthController extends Controller
         );
     }
 
-    private function makeStateCookie(string $state): Cookie
+    private function makeStateCookie(AuthStateCookieData $state): Cookie
     {
         return Cookie::create(
             name: self::STATE_COOKIE_NAME,
-            value: $state,
+            value: $state->encode(),
             expire: now()->addMinutes(5),
             path: AuthCookieSettings::path(),
             domain: AuthCookieSettings::domain(),
@@ -221,10 +234,16 @@ class AuthController extends Controller
 
     private function resolveCorrelationId(Request $request): string
     {
-        $attributeCorrelationId = $request->attributes->get(SessionMiddleware::CORRELATION_ID_ATTRIBUTE);
+        $attributeCorrelationId = $request->attributes->get(RequestContextMiddleware::CORRELATION_ID_ATTRIBUTE);
 
         if (is_string($attributeCorrelationId) && $attributeCorrelationId !== '') {
             return $attributeCorrelationId;
+        }
+
+        $stateCookieCorrelationId = AuthStateCookieData::decode($request->cookie(self::STATE_COOKIE_NAME))?->correlationId;
+
+        if (is_string($stateCookieCorrelationId) && $stateCookieCorrelationId !== '') {
+            return $stateCookieCorrelationId;
         }
 
         $headerCorrelationId = $request->header('X-Correlation-ID');
@@ -232,5 +251,49 @@ class AuthController extends Controller
         return is_string($headerCorrelationId) && $headerCorrelationId !== ''
             ? $headerCorrelationId
             : (string) Str::uuid();
+    }
+
+    private function resolveAuthFlowId(Request $request): string
+    {
+        $attributeAuthFlowId = $request->attributes->get(RequestContextMiddleware::AUTH_FLOW_ID_ATTRIBUTE);
+
+        if (is_string($attributeAuthFlowId) && $attributeAuthFlowId !== '') {
+            return $attributeAuthFlowId;
+        }
+
+        $queryAuthFlowId = $request->query('auth_flow_id');
+
+        return is_string($queryAuthFlowId) && trim($queryAuthFlowId) !== ''
+            ? trim($queryAuthFlowId)
+            : (string) Str::uuid();
+    }
+
+    private function callbackFailureCode(string $code): string
+    {
+        return match ($code) {
+            'token_exchange_failed' => 'BE_KEYCLOAK_UNAVAILABLE',
+            'invalid_state' => 'BE_SESSION_EXPIRED',
+            'session_persistence_failed', 'internal_error' => 'BE_SESSION_LOOKUP_FAILED',
+            default => 'BE_SESSION_LOOKUP_FAILED',
+        };
+    }
+
+    private function callbackRecoveryHint(string $code): string
+    {
+        return match ($code) {
+            'token_exchange_failed' => 'retry_auth_bootstrap',
+            'invalid_state' => 'restart_auth_flow',
+            'session_persistence_failed' => 'retry_auth_bootstrap',
+            default => 'retry_auth_bootstrap',
+        };
+    }
+
+    private function callbackRetryable(string $code): bool
+    {
+        return match ($code) {
+            'invalid_state' => false,
+            'token_exchange_failed', 'session_persistence_failed', 'internal_error' => true,
+            default => false,
+        };
     }
 }
