@@ -6,6 +6,8 @@ use App\Services\Auth\BearerTokenValidator;
 use App\Services\Session\SessionData;
 use App\Services\Session\SessionService;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use Mockery;
 use Tests\Feature\Concerns\UsesProtectedApiAuth;
 use Tests\TestCase;
@@ -13,6 +15,43 @@ use Tests\TestCase;
 class ProtectedApiAuthenticationContractTest extends TestCase
 {
     use UsesProtectedApiAuth;
+
+    public function test_protected_routes_require_bearer_validation_before_session_loading(): void
+    {
+        foreach ($this->protectedRouteMiddlewareExpectations() as [$method, $uri, $expectedMiddleware]) {
+            $middleware = $this->middlewareFor($method, $uri);
+
+            foreach ($expectedMiddleware as $middlewareName) {
+                $this->assertContains($middlewareName, $middleware, $method.' '.$uri);
+            }
+
+            $this->assertMiddlewareBefore($middleware, 'bearer.validate', 'session.load', $method.' '.$uri);
+        }
+    }
+
+    public function test_public_auth_and_runtime_routes_do_not_require_bearer_or_session_middleware(): void
+    {
+        foreach ($this->publicRouteRequests() as [$method, $uri]) {
+            $middleware = $this->middlewareFor($method, $uri);
+
+            $this->assertNotContains('bearer.validate', $middleware, $method.' '.$uri);
+            $this->assertNotContains('session.load', $middleware, $method.' '.$uri);
+        }
+    }
+
+    public function test_no_route_loads_session_without_prior_bearer_validation(): void
+    {
+        foreach (Route::getRoutes() as $route) {
+            $middleware = $route->gatherMiddleware();
+
+            if (! in_array('session.load', $middleware, true)) {
+                continue;
+            }
+
+            $this->assertContains('bearer.validate', $middleware, $route->uri());
+            $this->assertMiddlewareBefore($middleware, 'bearer.validate', 'session.load', $route->uri());
+        }
+    }
 
     public function test_protected_api_routes_reject_cookie_only_session(): void
     {
@@ -191,6 +230,32 @@ class ProtectedApiAuthenticationContractTest extends TestCase
             ]);
     }
 
+    public function test_protected_api_rejects_token_session_role_mismatch(): void
+    {
+        $this->bindValidBearerToken(role: 'admin');
+        $this->bindSession(role: 'client');
+
+        $response = $this->call(
+            'GET',
+            '/api/v1/client/dashboard',
+            [],
+            [],
+            [],
+            $this->protectedApiServerHeaders(),
+        );
+
+        $response
+            ->assertForbidden()
+            ->assertJson([
+                'success' => false,
+                'data' => null,
+                'error' => [
+                    'code' => 'forbidden',
+                    'reason' => 'TOKEN_SESSION_MISMATCH',
+                ],
+            ]);
+    }
+
     public function test_protected_api_preserves_role_based_access_denial(): void
     {
         $this->bindValidBearerToken(role: 'admin');
@@ -233,6 +298,7 @@ class ProtectedApiAuthenticationContractTest extends TestCase
         $taskId = $projectId.'-task-scope';
 
         return [
+            ['GET', '/v1/auth/me', []],
             ['GET', '/api/v1/client/dashboard', []],
             ['GET', '/api/v1/client/projects', []],
             ['GET', '/api/v1/client/projects/'.$projectId, []],
@@ -248,7 +314,72 @@ class ProtectedApiAuthenticationContractTest extends TestCase
                 'expectedVersion' => 1,
                 'idempotencyKey' => '11111111-1111-4111-8111-111111111111',
             ]],
+            ['GET', '/api/v1/client/users/user-123', []],
+            ['GET', '/api/v1/admin/users/admin-123', []],
         ];
+    }
+
+    /**
+     * @return array<int, array{0: string, 1: string, 2: array<int, string>}>
+     */
+    private function protectedRouteMiddlewareExpectations(): array
+    {
+        $projectId = $this->ownedProjectId('user-123');
+        $taskId = $projectId.'-task-scope';
+
+        return [
+            ['GET', '/v1/auth/me', ['bearer.validate', 'session.load']],
+            ['GET', '/api/v1/client/dashboard', ['dashboard.audit', 'bearer.validate', 'session.load', 'rbac:client']],
+            ['GET', '/api/v1/client/projects', ['projects.list.audit', 'bearer.validate', 'session.load', 'rbac:client']],
+            ['GET', '/api/v1/client/projects/'.$projectId, ['projects.detail.audit', 'bearer.validate', 'session.load', 'rbac:client']],
+            ['GET', '/api/v1/client/projects/'.$projectId.'/tasks', ['tasks.collection.audit', 'bearer.validate', 'session.load', 'rbac:client']],
+            ['POST', '/api/v1/client/projects/'.$projectId.'/tasks', ['bearer.validate', 'session.load', 'rbac:client']],
+            ['PATCH', '/api/v1/client/projects/'.$projectId.'/tasks/'.$taskId.'/status', ['bearer.validate', 'session.load', 'rbac:client']],
+            ['GET', '/api/v1/client/users/user-123', ['bearer.validate', 'session.load', 'rbac:client', 'owner']],
+            ['GET', '/api/v1/admin/users/admin-123', ['bearer.validate', 'session.load', 'rbac:admin']],
+        ];
+    }
+
+    /**
+     * @return array<int, array{0: string, 1: string}>
+     */
+    private function publicRouteRequests(): array
+    {
+        return [
+            ['GET', '/'],
+            ['GET', '/up'],
+            ['GET', '/v1/auth/runtime/health'],
+            ['GET', '/v1/auth/runtime/deployment'],
+            ['GET', '/v1/auth/login'],
+            ['GET', '/v1/auth/callback'],
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function middlewareFor(string $method, string $uri): array
+    {
+        return Route::getRoutes()
+            ->match(Request::create($uri, $method))
+            ->gatherMiddleware();
+    }
+
+    /**
+     * @param array<int, string> $middleware
+     */
+    private function assertMiddlewareBefore(
+        array $middleware,
+        string $first,
+        string $second,
+        string $context,
+    ): void {
+        $firstIndex = array_search($first, $middleware, true);
+        $secondIndex = array_search($second, $middleware, true);
+
+        $this->assertIsInt($firstIndex, $context);
+        $this->assertIsInt($secondIndex, $context);
+        $this->assertLessThan($secondIndex, $firstIndex, $context);
     }
 
     private function bindSession(string $subject = 'user-123', string $role = 'client'): void
