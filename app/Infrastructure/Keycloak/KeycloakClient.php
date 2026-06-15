@@ -2,6 +2,7 @@
 
 namespace App\Infrastructure\Keycloak;
 
+use App\Services\Auth\Exceptions\InvalidBearerTokenException;
 use App\Services\Auth\Exceptions\TokenExchangeException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Throwable;
@@ -95,5 +96,59 @@ class KeycloakClient
             idToken: $idToken,
             refreshExpiresIn: max(1, (int) $refreshExpiresIn),
         );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function introspectToken(string $token): array
+    {
+        $payload = [
+            'token' => $token,
+            'client_id' => config('keycloak.client_id'),
+        ];
+
+        $clientSecret = (string) config('keycloak.client_secret', '');
+
+        if ($clientSecret !== '') {
+            $payload['client_secret'] = $clientSecret;
+        }
+
+        try {
+            $request = $this->http
+                ->asForm()
+                ->acceptJson()
+                ->timeout((int) config('keycloak.timeout', 10));
+
+            if (app()->isLocal()) {
+                $request = $request->withoutVerifying();
+            }
+
+            $response = $request->post((string) config('keycloak.introspection_endpoint'), $payload);
+        } catch (Throwable $exception) {
+            throw new InvalidBearerTokenException(
+                'BEARER_TOKEN_INTROSPECTION_FAILED',
+                'Bearer token introspection request failed.',
+                $exception,
+            );
+        }
+
+        if ($response->failed()) {
+            throw new InvalidBearerTokenException(
+                'BEARER_TOKEN_INTROSPECTION_FAILED',
+                'Bearer token introspection failed.',
+            );
+        }
+
+        $data = $response->json();
+
+        if (! is_array($data)) {
+            throw new InvalidBearerTokenException(
+                'BEARER_TOKEN_INTROSPECTION_FAILED',
+                'Invalid bearer token introspection response.',
+            );
+        }
+
+        return $data;
     }
 }

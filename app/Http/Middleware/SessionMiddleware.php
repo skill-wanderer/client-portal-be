@@ -2,18 +2,17 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\Auth\ValidatedBearerToken;
 use App\Services\Session\Exceptions\SessionRetrievalException;
 use App\Services\Session\SessionData;
 use App\Services\Session\SessionService;
 use App\Support\Api\ApiResponse;
 use App\Support\Api\Contracts\ErrorData;
-use App\Support\Security\AuthCookieSettings;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Psr\Log\LoggerInterface;
-use Symfony\Component\HttpFoundation\Cookie;
 use Symfony\Component\HttpFoundation\Response;
 
 class SessionMiddleware
@@ -36,10 +35,16 @@ class SessionMiddleware
         $correlationId = $this->resolveCorrelationId($request);
         $request->attributes->set(self::CORRELATION_ID_ATTRIBUTE, $correlationId);
 
+        $bearerToken = $request->attributes->get(BearerTokenMiddleware::REQUEST_ATTRIBUTE);
+
+        if (! $bearerToken instanceof ValidatedBearerToken) {
+            return $this->missingBearerResponse($correlationId);
+        }
+
         $sessionId = $this->resolveSessionToken($request);
 
         if ($sessionId === null) {
-            return $this->unauthorizedResponse($correlationId, 'NO_SESSION');
+            return $this->unauthorizedResponse($correlationId, 'NO_SESSION_ID');
         }
 
         try {
@@ -68,9 +73,27 @@ class SessionMiddleware
             return $this->unauthorizedResponse($correlationId, 'SESSION_EXPIRED', $session->userEmail);
         }
 
+        if (! $this->sessionMatchesBearer($session, $bearerToken)) {
+            return $this->tokenSessionMismatchResponse($correlationId, $session, $bearerToken);
+        }
+
         $request->attributes->set(self::REQUEST_ATTRIBUTE, $session);
 
         return $next($request);
+    }
+
+    private function missingBearerResponse(string $correlationId): JsonResponse
+    {
+        return ApiResponse::error(new ErrorData(
+            code: 'unauthorized',
+            message: 'A validated bearer token is required.',
+            reason: 'NO_BEARER_CONTEXT',
+            authenticated: false,
+            failureCode: 'BE_BEARER_TOKEN_INVALID',
+            recoveryHint: 'reauthenticate',
+            retryable: false,
+            runtimeBoundary: 'backend_auth',
+        ), 401, $correlationId);
     }
 
     private function unauthorizedResponse(
@@ -94,9 +117,33 @@ class SessionMiddleware
             'retryable' => false,
             'runtime_boundary' => 'backend_session',
         ], 401, $correlationId);
-        $response->withCookie($this->expireSessionCookie());
 
         return $response;
+    }
+
+    private function tokenSessionMismatchResponse(
+        string $correlationId,
+        SessionData $session,
+        ValidatedBearerToken $bearerToken,
+    ): JsonResponse {
+        $this->logger->warning('auth.session_mismatch', [
+            'correlation_id' => $correlationId,
+            'session_user_id' => $session->userSub,
+            'bearer_subject' => $bearerToken->subject,
+            'session_role' => $session->userRole,
+            'bearer_role' => $bearerToken->role,
+        ]);
+
+        return ApiResponse::error(new ErrorData(
+            code: 'forbidden',
+            message: 'The bearer token does not match the authenticated session.',
+            reason: 'TOKEN_SESSION_MISMATCH',
+            authenticated: false,
+            failureCode: 'BE_TOKEN_SESSION_MISMATCH',
+            recoveryHint: 'reauthenticate',
+            retryable: false,
+            runtimeBoundary: 'backend_auth',
+        ), 403, $correlationId);
     }
 
     private function internalErrorResponse(string $correlationId): JsonResponse
@@ -113,28 +160,6 @@ class SessionMiddleware
         ), 500, $correlationId);
     }
 
-    private function decorateResponse(JsonResponse $response, string $correlationId): void
-    {
-        $response->headers->set('Cache-Control', 'no-store');
-        $response->headers->set('Pragma', 'no-cache');
-        $response->headers->set('X-Correlation-ID', $correlationId);
-    }
-
-    private function expireSessionCookie(): Cookie
-    {
-        return Cookie::create(
-            name: '__session',
-            value: '',
-            expire: now()->subMinute(),
-            path: AuthCookieSettings::path(),
-            domain: AuthCookieSettings::domain(),
-            secure: AuthCookieSettings::secure(),
-            httpOnly: true,
-            raw: false,
-            sameSite: AuthCookieSettings::sameSite(),
-        );
-    }
-
     private function resolveCorrelationId(Request $request): string
     {
         $headerCorrelationId = $request->header('X-Correlation-ID');
@@ -146,17 +171,24 @@ class SessionMiddleware
 
     private function resolveSessionToken(Request $request): ?string
     {
-        $bearerToken = $request->bearerToken();
+        $sessionId = $request->header('X-Session-Id');
 
-        if (is_string($bearerToken) && trim($bearerToken) !== '') {
-            return trim($bearerToken);
+        return is_string($sessionId) && trim($sessionId) !== ''
+            ? trim($sessionId)
+            : null;
+    }
+
+    private function sessionMatchesBearer(SessionData $session, ValidatedBearerToken $bearerToken): bool
+    {
+        if ($session->userSub !== $bearerToken->subject) {
+            return false;
         }
 
-        $sessionCookie = $request->cookie('__session');
+        if ($session->userRole !== '' && $bearerToken->role !== '' && $session->userRole !== $bearerToken->role) {
+            return false;
+        }
 
-        return is_string($sessionCookie) && $sessionCookie !== ''
-            ? $sessionCookie
-            : null;
+        return true;
     }
 
     private function bestEffortDelete(

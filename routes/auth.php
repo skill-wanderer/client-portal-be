@@ -9,5 +9,5 @@ Route::prefix('v1/auth')->group(function () {
     Route::get('/runtime/deployment', [RuntimeController::class, 'deployment']);
     Route::get('/login', [AuthController::class, 'login']);
     Route::get('/callback', [AuthController::class, 'callback']);
-    Route::get('/me', [AuthController::class, 'me'])->middleware('session.load');
+    Route::get('/me', [AuthController::class, 'me'])->middleware(['bearer.validate', 'session.load']);
 });

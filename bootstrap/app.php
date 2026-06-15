@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\DashboardAuditMiddleware;
+use App\Http\Middleware\BearerTokenMiddleware;
 use App\Http\Middleware\OwnershipMiddleware;
 use App\Http\Middleware\ProjectsDetailAuditMiddleware;
 use App\Http\Middleware\ProjectsListAuditMiddleware;
@@ -56,6 +57,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'dashboard.audit' => DashboardAuditMiddleware::class,
+            'bearer.validate' => BearerTokenMiddleware::class,
             'projects.detail.audit' => ProjectsDetailAuditMiddleware::class,
             'projects.list.audit' => ProjectsListAuditMiddleware::class,
             'session.load' => SessionMiddleware::class,

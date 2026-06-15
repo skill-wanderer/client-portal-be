@@ -21,13 +21,11 @@ class DashboardAuditMiddleware
     public function handle(Request $request, Closure $next): Response
     {
         $correlationId = $this->resolveCorrelationId($request);
-        $sessionCookie = $request->cookie('__session');
 
         $this->logger->info('dashboard.request', [
             'correlation_id' => $correlationId,
             'method' => $request->method(),
             'path' => $request->path(),
-            'session_cookie_present' => is_string($sessionCookie) && $sessionCookie !== '',
         ]);
 
         $response = $next($request);
@@ -38,7 +36,6 @@ class DashboardAuditMiddleware
                 'correlation_id' => $correlationId,
                 'method' => $request->method(),
                 'path' => $request->path(),
-                'session_cookie_present' => is_string($sessionCookie) && $sessionCookie !== '',
             ]);
 
             return $response;

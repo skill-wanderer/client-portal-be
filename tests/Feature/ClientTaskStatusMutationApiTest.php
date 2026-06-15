@@ -16,11 +16,13 @@ use Illuminate\Testing\TestResponse;
 use Illuminate\Support\Str;
 use Mockery;
 use RuntimeException;
+use Tests\Feature\Concerns\UsesProtectedApiAuth;
 use Tests\TestCase;
 
 class ClientTaskStatusMutationApiTest extends TestCase
 {
     use RefreshDatabase;
+    use UsesProtectedApiAuth;
 
     protected bool $seed = true;
 
@@ -559,14 +561,15 @@ class ClientTaskStatusMutationApiTest extends TestCase
             ));
 
         $this->app->instance(SessionService::class, $sessionService);
+        $this->bindValidBearerToken();
 
         return $this->call(
             'PATCH',
             '/api/v1/client/projects/'.$projectId.'/tasks/'.$taskId.'/status',
             $payload,
-            ['__session' => 'test-session-id'],
             [],
-            ['HTTP_ACCEPT' => 'application/json'],
+            [],
+            $this->protectedApiServerHeaders(),
         );
     }
 

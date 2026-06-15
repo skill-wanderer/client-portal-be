@@ -6,10 +6,13 @@ use App\Services\Session\SessionData;
 use App\Services\Session\SessionService;
 use Carbon\CarbonImmutable;
 use Mockery;
+use Tests\Feature\Concerns\UsesProtectedApiAuth;
 use Tests\TestCase;
 
 class ClientDashboardApiTest extends TestCase
 {
+    use UsesProtectedApiAuth;
+
     public function test_dashboard_requires_an_authenticated_session(): void
     {
         config()->set('app.deployment_id', 'backend-test-deploy');
@@ -30,10 +33,10 @@ class ClientDashboardApiTest extends TestCase
                 'contract_version' => 'contract-test-v1',
                 'error' => [
                     'code' => 'unauthorized',
-                    'failure_code' => 'BE_SESSION_EXPIRED',
+                    'failure_code' => 'BE_BEARER_TOKEN_INVALID',
                     'recovery_hint' => 'reauthenticate',
                     'retryable' => false,
-                    'runtime_boundary' => 'backend_session',
+                    'runtime_boundary' => 'backend_auth',
                 ],
             ]);
 
@@ -45,6 +48,31 @@ class ClientDashboardApiTest extends TestCase
             $response->headers->get('X-Request-ID'),
             $response->json('request_id'),
         );
+    }
+
+    public function test_dashboard_does_not_treat_bearer_token_as_session_id(): void
+    {
+        $this->bindValidBearerToken(token: 'test-session-id');
+        $sessionService = Mockery::mock(SessionService::class);
+        $sessionService->shouldNotReceive('getSession');
+        $this->app->instance(SessionService::class, $sessionService);
+
+        $response = $this
+            ->withHeaders([
+                'Authorization' => 'Bearer test-session-id',
+            ])
+            ->getJson('/api/v1/client/dashboard');
+
+        $response
+            ->assertUnauthorized()
+            ->assertJson([
+                'success' => false,
+                'data' => null,
+                'error' => [
+                    'code' => 'unauthorized',
+                    'reason' => 'NO_SESSION_ID',
+                ],
+            ]);
     }
 
     public function test_dashboard_returns_the_authenticated_user_and_ready_payload(): void
@@ -66,14 +94,15 @@ class ClientDashboardApiTest extends TestCase
             ));
 
         $this->app->instance(SessionService::class, $sessionService);
+        $this->bindValidBearerToken();
 
         $response = $this->call(
             'GET',
             '/api/v1/client/dashboard',
             [],
-            ['__session' => 'test-session-id'],
             [],
-            ['HTTP_ACCEPT' => 'application/json'],
+            [],
+            $this->protectedApiServerHeaders(),
         );
 
         $response

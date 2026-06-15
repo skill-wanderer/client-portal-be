@@ -9,11 +9,13 @@ use App\Services\Session\SessionService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
+use Tests\Feature\Concerns\UsesProtectedApiAuth;
 use Tests\TestCase;
 
 class ClientProjectDetailApiTest extends TestCase
 {
     use RefreshDatabase;
+    use UsesProtectedApiAuth;
 
     protected bool $seed = true;
 
@@ -140,14 +142,15 @@ class ClientProjectDetailApiTest extends TestCase
             ));
 
         $this->app->instance(SessionService::class, $sessionService);
+        $this->bindValidBearerToken();
 
         return $this->call(
             'GET',
             '/api/v1/client/projects/'.$projectId,
             [],
-            ['__session' => 'test-session-id'],
             [],
-            ['HTTP_ACCEPT' => 'application/json'],
+            [],
+            $this->protectedApiServerHeaders(),
         );
     }
 
