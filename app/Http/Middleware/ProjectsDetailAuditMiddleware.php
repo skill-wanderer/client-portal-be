@@ -24,7 +24,6 @@ class ProjectsDetailAuditMiddleware
     public function handle(Request $request, Closure $next): Response
     {
         $correlationId = $this->resolveCorrelationId($request);
-        $sessionCookie = $request->cookie('__session');
         $projectId = $request->route('projectId');
 
         $this->logger->info('projects.detail.request', [
@@ -32,7 +31,6 @@ class ProjectsDetailAuditMiddleware
             'method' => $request->method(),
             'path' => $request->path(),
             'project_id' => is_scalar($projectId) ? (string) $projectId : null,
-            'session_cookie_present' => is_string($sessionCookie) && $sessionCookie !== '',
         ]);
 
         $response = $next($request);
@@ -46,7 +44,6 @@ class ProjectsDetailAuditMiddleware
                 'method' => $request->method(),
                 'path' => $request->path(),
                 'project_id' => is_scalar($projectId) ? (string) $projectId : null,
-                'session_cookie_present' => is_string($sessionCookie) && $sessionCookie !== '',
             ]);
 
             return $response;

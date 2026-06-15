@@ -15,11 +15,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Mockery;
 use RuntimeException;
+use Tests\Feature\Concerns\UsesProtectedApiAuth;
 use Tests\TestCase;
 
 class ClientTaskCreateApiTest extends TestCase
 {
     use RefreshDatabase;
+    use UsesProtectedApiAuth;
 
     protected bool $seed = true;
 
@@ -289,14 +291,15 @@ class ClientTaskCreateApiTest extends TestCase
             ));
 
         $this->app->instance(SessionService::class, $sessionService);
+        $this->bindValidBearerToken();
 
         return $this->call(
             'POST',
             '/api/v1/client/projects/'.$projectId.'/tasks',
             $payload,
-            ['__session' => 'test-session-id'],
             [],
-            ['HTTP_ACCEPT' => 'application/json'],
+            [],
+            $this->protectedApiServerHeaders(),
         );
     }
 

@@ -31,7 +31,6 @@ class TasksCollectionAuditMiddleware
     public function handle(Request $request, Closure $next): Response
     {
         $correlationId = $this->resolveCorrelationId($request);
-        $sessionCookie = $request->cookie('__session');
         $queryParams = $request->query();
         $projectId = $request->route('projectId');
 
@@ -41,7 +40,6 @@ class TasksCollectionAuditMiddleware
             'path' => $request->path(),
             'project_id' => is_scalar($projectId) ? (string) $projectId : null,
             'query_params' => $queryParams,
-            'session_cookie_present' => is_string($sessionCookie) && $sessionCookie !== '',
         ]);
 
         $response = $next($request);
@@ -59,7 +57,6 @@ class TasksCollectionAuditMiddleware
                 'path' => $request->path(),
                 'project_id' => is_scalar($projectId) ? (string) $projectId : null,
                 'query_params' => $queryParams,
-                'session_cookie_present' => is_string($sessionCookie) && $sessionCookie !== '',
             ]);
 
             return $response;
