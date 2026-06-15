@@ -47,6 +47,30 @@ class ClientDashboardApiTest extends TestCase
         );
     }
 
+    public function test_dashboard_does_not_treat_bearer_token_as_session_id(): void
+    {
+        $sessionService = Mockery::mock(SessionService::class);
+        $sessionService->shouldNotReceive('getSession');
+        $this->app->instance(SessionService::class, $sessionService);
+
+        $response = $this
+            ->withHeaders([
+                'Authorization' => 'Bearer test-session-id',
+            ])
+            ->getJson('/api/v1/client/dashboard');
+
+        $response
+            ->assertUnauthorized()
+            ->assertJson([
+                'success' => false,
+                'data' => null,
+                'error' => [
+                    'code' => 'unauthorized',
+                    'reason' => 'NO_SESSION',
+                ],
+            ]);
+    }
+
     public function test_dashboard_returns_the_authenticated_user_and_ready_payload(): void
     {
         config()->set('app.deployment_id', 'backend-test-deploy');

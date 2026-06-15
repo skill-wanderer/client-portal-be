@@ -20,10 +20,18 @@ return [
         'KEYCLOAK_TOKEN_ENDPOINT',
         $baseUrl.'/realms/'.$realm.'/protocol/openid-connect/token'
     ),
+    'introspection_endpoint' => env(
+        'KEYCLOAK_INTROSPECTION_ENDPOINT',
+        $baseUrl.'/realms/'.$realm.'/protocol/openid-connect/token/introspect'
+    ),
     'frontend_dashboard_url' => env(
         'KEYCLOAK_FRONTEND_DASHBOARD_URL',
         $frontendUrl !== '' ? $frontendUrl.'/dashboard' : ''
     ),
+    'allowed_roles' => array_values(array_filter(array_map(
+        static fn (string $role): string => strtolower(trim($role)),
+        explode(',', (string) env('KEYCLOAK_ALLOWED_ROLES', 'client,admin'))
+    ))),
     'timeout' => (int) env('KEYCLOAK_TIMEOUT', 10),
     'response_type' => 'code',
     'scope' => 'openid profile email',

@@ -146,12 +146,6 @@ class SessionMiddleware
 
     private function resolveSessionToken(Request $request): ?string
     {
-        $bearerToken = $request->bearerToken();
-
-        if (is_string($bearerToken) && trim($bearerToken) !== '') {
-            return trim($bearerToken);
-        }
-
         $sessionCookie = $request->cookie('__session');
 
         return is_string($sessionCookie) && $sessionCookie !== ''
