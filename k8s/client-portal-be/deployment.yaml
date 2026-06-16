@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-portal-be
+  namespace: client-portal
+  labels:
+    app.kubernetes.io/name: client-portal-be
+    app.kubernetes.io/part-of: client-portal
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: client-portal-be
+      app.kubernetes.io/part-of: client-portal
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: client-portal-be
+        app.kubernetes.io/part-of: client-portal
+        app.kubernetes.io/component: backend
+    spec:
+      containers:
+        - name: client-portal-be
+          image: ghcr.io/skill-wanderer/client-portal-be:0.1.5
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: client-portal-be-config
+            - secretRef:
+                name: client-portal-be-secret
+          readinessProbe:
+            httpGet:
+              path: /v1/auth/runtime/health
+              port: 8080
+          livenessProbe:
+            httpGet:
+              path: /up
+              port: 8080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
