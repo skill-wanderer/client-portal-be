@@ -37,5 +37,5 @@ data:
   KEYCLOAK_FRONTEND_DASHBOARD_URL: "https://client.skill-wanderer.com/dashboard"
   KEYCLOAK_ALLOWED_ROLES: "client,admin"
   KEYCLOAK_TIMEOUT: "10"
-  BE_DEPLOYMENT_ID: "client-portal-be-0.1.5"
+  BE_DEPLOYMENT_ID: "client-portal-be-0.1.6"
   CONTRACT_VERSION: "2026-05-21"
