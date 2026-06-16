@@ -23,11 +23,11 @@ spec:
     spec:
       containers:
         - name: client-portal-be
-          image: ghcr.io/skill-wanderer/client-portal-be:0.1.5
+          image: ghcr.io/skill-wanderer/client-portal-be:0.1.6
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 8000
           envFrom:
             - configMapRef:
                 name: client-portal-be-config
@@ -36,11 +36,11 @@ spec:
           readinessProbe:
             httpGet:
               path: /v1/auth/runtime/health
-              port: 8080
+              port: 8000
           livenessProbe:
             httpGet:
               path: /up
-              port: 8080
+              port: 8000
           resources:
             requests:
               cpu: 100m
