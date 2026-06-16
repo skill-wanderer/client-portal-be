@@ -32,7 +32,7 @@ data:
   QUEUE_CONNECTION: "sync"
   KEYCLOAK_BASE_URL: "https://sso.skill-wanderer.com"
   KEYCLOAK_REALM: "client-portal"
-  KEYCLOAK_CLIENT_ID: "client-portal-fe"
+  KEYCLOAK_CLIENT_ID: "client-portal-be"
   KEYCLOAK_REDIRECT_URI: "https://api.skill-wanderer.com/v1/auth/callback"
   KEYCLOAK_FRONTEND_DASHBOARD_URL: "https://client.skill-wanderer.com/dashboard"
   KEYCLOAK_ALLOWED_ROLES: "client,admin"
