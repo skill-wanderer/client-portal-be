@@ -32,10 +32,10 @@ if ($trustedProxies === '*' || $trustedProxies === '**') {
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
-        web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         then: function () {
+            Route::group([], base_path('routes/api.php'));
             Route::group([], base_path('routes/auth.php'));
             Route::group([], base_path('routes/api_client.php'));
             Route::group([], base_path('routes/api_admin.php'));

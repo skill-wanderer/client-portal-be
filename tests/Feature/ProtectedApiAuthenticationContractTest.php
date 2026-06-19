@@ -346,8 +346,9 @@ class ProtectedApiAuthenticationContractTest extends TestCase
     private function publicRouteRequests(): array
     {
         return [
-            ['GET', '/'],
             ['GET', '/up'],
+            ['GET', '/api/v1/health'],
+            ['GET', '/api/v1/test-db'],
             ['GET', '/v1/auth/runtime/health'],
             ['GET', '/v1/auth/runtime/deployment'],
             ['GET', '/v1/auth/login'],
