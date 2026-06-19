@@ -28,7 +28,6 @@ services:
       KEYCLOAK_CLIENT_SECRET: ''
       KEYCLOAK_REALM: client-portal
       KEYCLOAK_FRONTEND_DASHBOARD_URL: http://127.0.0.1:3000/dashboard
-      KEYCLOAK_REDIRECT_URI: http://127.0.0.1:8000/v1/auth/callback
       LOG_CHANNEL: stack
       LOG_STACK: stderr
       PHP_CLI_SERVER_WORKERS: '4'

@@ -11,7 +11,7 @@ return [
     'issuer' => env('KEYCLOAK_ISSUER', $baseUrl.'/realms/'.$realm),
     'client_id' => env('KEYCLOAK_CLIENT_ID', 'client-portal-fe'),
     'client_secret' => env('KEYCLOAK_CLIENT_SECRET', ''),
-    'redirect_uri' => env('KEYCLOAK_REDIRECT_URI', $backendUrl !== '' ? $backendUrl.'/v1/auth/callback' : ''),
+    'redirect_uri' => $backendUrl !== '' ? $backendUrl.'/v1/auth/callback' : '',
     'authorization_endpoint' => env(
         'KEYCLOAK_AUTHORIZATION_ENDPOINT',
         $baseUrl.'/realms/'.$realm.'/protocol/openid-connect/auth'

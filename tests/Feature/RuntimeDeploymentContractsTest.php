@@ -79,7 +79,7 @@ class RuntimeDeploymentContractsTest extends TestCase
     public function test_runtime_health_endpoint_classifies_auth_alignment_mismatch_as_incompatible(): void
     {
         $this->setValidRuntimeConfig();
-        config()->set('keycloak.redirect_uri', 'https://api.skill-wanderer.com/callback');
+        config()->set('keycloak.redirect_uri', 'https://client-portal-api.com/callback');
 
         $response = $this->getJson('/v1/auth/runtime/health');
 
@@ -109,7 +109,7 @@ class RuntimeDeploymentContractsTest extends TestCase
     private function setValidRuntimeConfig(): void
     {
         config()->set('app.env', 'production');
-        config()->set('app.url', 'https://api.skill-wanderer.com');
+        config()->set('app.url', 'https://client-portal-api.com');
         config()->set('app.frontend_app_url', 'https://client.skill-wanderer.com');
         config()->set('app.deployment_id', 'backend-test-deploy');
         config()->set('app.contract_version', 'contract-test-v1');
@@ -127,7 +127,7 @@ class RuntimeDeploymentContractsTest extends TestCase
         config()->set('keycloak.issuer', 'https://sso.skill-wanderer.com/realms/client-portal');
         config()->set('keycloak.client_id', 'client-portal-fe');
         config()->set('keycloak.client_secret', 'runtime-secret');
-        config()->set('keycloak.redirect_uri', 'https://api.skill-wanderer.com/v1/auth/callback');
+        config()->set('keycloak.redirect_uri', 'https://client-portal-api.com/v1/auth/callback');
         config()->set('keycloak.authorization_endpoint', 'https://sso.skill-wanderer.com/realms/client-portal/protocol/openid-connect/auth');
         config()->set('keycloak.token_endpoint', 'https://sso.skill-wanderer.com/realms/client-portal/protocol/openid-connect/token');
         config()->set('keycloak.frontend_dashboard_url', 'https://client.skill-wanderer.com/dashboard');
