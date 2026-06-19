@@ -347,7 +347,6 @@ class ProtectedApiAuthenticationContractTest extends TestCase
     {
         return [
             ['GET', '/up'],
-            ['GET', '/api/v1/health'],
             ['GET', '/api/v1/test-db'],
             ['GET', '/v1/auth/runtime/health'],
             ['GET', '/v1/auth/runtime/deployment'],

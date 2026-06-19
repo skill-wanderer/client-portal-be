@@ -7,14 +7,6 @@ use Illuminate\Support\Facades\DB;
 
 final class RuntimeTestController
 {
-    public function health(): JsonResponse
-    {
-        return response()->json([
-            'status' => 'ok',
-            'service' => 'client-portal-be',
-        ]);
-    }
-
     public function database(): JsonResponse
     {
         try {
