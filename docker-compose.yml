@@ -20,15 +20,19 @@ services:
       BE_DEPLOYMENT_ID: compose-local
       CACHE_STORE: file
       CORS_ALLOWED_ORIGINS: http://127.0.0.1:3000,http://localhost:3000
-      DB_CONNECTION: sqlite
-      DB_DATABASE: /var/www/html/database/database.sqlite
+      DB_CONNECTION: pgsql
+      DB_HOST: ${DOCKER_DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-15432}
+      DB_DATABASE: ${DB_DATABASE:-client_portal}
+      DB_USERNAME: ${DB_USERNAME:-client_portal}
+      DB_PASSWORD: "${DB_PASSWORD:?Set DB_PASSWORD in local .env for PostgreSQL runtime}"
+      DB_SSLMODE: ${DB_SSLMODE:-prefer}
       FRONTEND_APP_URL: http://127.0.0.1:3000
       KEYCLOAK_BASE_URL: https://sso.skill-wanderer.com
       KEYCLOAK_CLIENT_ID: client-portal-fe
       KEYCLOAK_CLIENT_SECRET: ''
       KEYCLOAK_REALM: client-portal
       KEYCLOAK_FRONTEND_DASHBOARD_URL: http://127.0.0.1:3000/dashboard
-      KEYCLOAK_REDIRECT_URI: http://127.0.0.1:8000/v1/auth/callback
       LOG_CHANNEL: stack
       LOG_STACK: stderr
       PHP_CLI_SERVER_WORKERS: '4'
