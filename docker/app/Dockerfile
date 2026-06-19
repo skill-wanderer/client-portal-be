@@ -9,10 +9,11 @@ RUN apt-get update \
         curl \
         git \
         libonig-dev \
+        libpq-dev \
         libsqlite3-dev \
         libzip-dev \
         unzip \
-    && docker-php-ext-install mbstring pdo_sqlite zip \
+    && docker-php-ext-install mbstring pdo_pgsql pgsql pdo_sqlite zip \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
