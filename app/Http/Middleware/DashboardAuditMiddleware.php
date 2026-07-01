@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Security\Keycloak\KeycloakPrincipal;
 use App\Services\Session\SessionData;
 use Closure;
 use Illuminate\Http\Request;
@@ -30,6 +31,7 @@ class DashboardAuditMiddleware
 
         $response = $next($request);
         $session = $request->attributes->get(SessionMiddleware::REQUEST_ATTRIBUTE);
+        $principal = $request->attributes->get(EnsureKeycloakBearerToken::REQUEST_ATTRIBUTE);
 
         if ($response->getStatusCode() === 401) {
             $this->logger->warning('dashboard.unauthorized', [
@@ -48,6 +50,13 @@ class DashboardAuditMiddleware
                 'user_email' => $session->userEmail,
                 'status' => $response->getStatusCode(),
             ]);
+        } elseif ($response->isSuccessful() && $principal instanceof KeycloakPrincipal) {
+            $this->logger->info('dashboard.success', [
+                'correlation_id' => $correlationId,
+                'user_id' => $principal->sub,
+                'user_email' => $principal->email ?? $principal->preferredUsername ?? $principal->sub,
+                'status' => $response->getStatusCode(),
+            ]);
         }
 
         return $response;
@@ -55,7 +64,8 @@ class DashboardAuditMiddleware
 
     private function resolveCorrelationId(Request $request): string
     {
-        $attributeCorrelationId = $request->attributes->get(SessionMiddleware::CORRELATION_ID_ATTRIBUTE);
+        $attributeCorrelationId = $request->attributes->get(RequestContextMiddleware::CORRELATION_ID_ATTRIBUTE)
+            ?? $request->attributes->get(SessionMiddleware::CORRELATION_ID_ATTRIBUTE);
 
         if (is_string($attributeCorrelationId) && $attributeCorrelationId !== '') {
             return $attributeCorrelationId;

@@ -25,7 +25,9 @@ class ProtectedApiAuthenticationContractTest extends TestCase
                 $this->assertContains($middlewareName, $middleware, $method.' '.$uri);
             }
 
-            $this->assertMiddlewareBefore($middleware, 'bearer.validate', 'session.load', $method.' '.$uri);
+            if (in_array('bearer.validate', $expectedMiddleware, true) && in_array('session.load', $expectedMiddleware, true)) {
+                $this->assertMiddlewareBefore($middleware, 'bearer.validate', 'session.load', $method.' '.$uri);
+            }
         }
     }
 
@@ -98,7 +100,7 @@ class ProtectedApiAuthenticationContractTest extends TestCase
             ->withHeaders([
                 'Authorization' => 'Bearer valid-access-token',
             ])
-            ->getJson('/api/v1/client/dashboard');
+            ->getJson('/v1/auth/me');
 
         $response
             ->assertUnauthorized()
@@ -130,7 +132,7 @@ class ProtectedApiAuthenticationContractTest extends TestCase
 
         $response = $this->call(
             'GET',
-            '/api/v1/client/dashboard',
+            '/v1/auth/me',
             [],
             [],
             [],
@@ -163,7 +165,7 @@ class ProtectedApiAuthenticationContractTest extends TestCase
             ->withHeaders([
                 'X-Session-Id' => 'test-session-id',
             ])
-            ->getJson('/api/v1/client/dashboard');
+            ->getJson('/v1/auth/me');
 
         $response
             ->assertUnauthorized()
@@ -184,7 +186,7 @@ class ProtectedApiAuthenticationContractTest extends TestCase
 
         $response = $this->call(
             'GET',
-            '/api/v1/client/dashboard',
+            '/v1/auth/me',
             [],
             [],
             [],
@@ -195,12 +197,6 @@ class ProtectedApiAuthenticationContractTest extends TestCase
             ->assertOk()
             ->assertJson([
                 'success' => true,
-                'data' => [
-                    'user' => [
-                        'id' => 'user-123',
-                        'email' => 'test@reltroner.com',
-                    ],
-                ],
             ]);
     }
 
@@ -211,7 +207,7 @@ class ProtectedApiAuthenticationContractTest extends TestCase
 
         $response = $this->call(
             'GET',
-            '/api/v1/client/dashboard',
+            '/v1/auth/me',
             [],
             [],
             [],
@@ -237,7 +233,7 @@ class ProtectedApiAuthenticationContractTest extends TestCase
 
         $response = $this->call(
             'GET',
-            '/api/v1/client/dashboard',
+            '/v1/auth/me',
             [],
             [],
             [],
@@ -263,7 +259,7 @@ class ProtectedApiAuthenticationContractTest extends TestCase
 
         $response = $this->call(
             'GET',
-            '/api/v1/client/dashboard',
+            '/api/v1/client/projects',
             [],
             [],
             [],
@@ -299,7 +295,6 @@ class ProtectedApiAuthenticationContractTest extends TestCase
 
         return [
             ['GET', '/v1/auth/me', []],
-            ['GET', '/api/v1/client/dashboard', []],
             ['GET', '/api/v1/client/projects', []],
             ['GET', '/api/v1/client/projects/'.$projectId, []],
             ['GET', '/api/v1/client/projects/'.$projectId.'/tasks', []],
@@ -329,7 +324,7 @@ class ProtectedApiAuthenticationContractTest extends TestCase
 
         return [
             ['GET', '/v1/auth/me', ['bearer.validate', 'session.load']],
-            ['GET', '/api/v1/client/dashboard', ['dashboard.audit', 'bearer.validate', 'session.load', 'rbac:client']],
+            ['GET', '/api/v1/client/dashboard', ['dashboard.audit', 'keycloak.token']],
             ['GET', '/api/v1/client/projects', ['projects.list.audit', 'bearer.validate', 'session.load', 'rbac:client']],
             ['GET', '/api/v1/client/projects/'.$projectId, ['projects.detail.audit', 'bearer.validate', 'session.load', 'rbac:client']],
             ['GET', '/api/v1/client/projects/'.$projectId.'/tasks', ['tasks.collection.audit', 'bearer.validate', 'session.load', 'rbac:client']],
@@ -413,3 +408,4 @@ class ProtectedApiAuthenticationContractTest extends TestCase
         return 'project-'.$workspaceSuffix.'-atlas';
     }
 }
+

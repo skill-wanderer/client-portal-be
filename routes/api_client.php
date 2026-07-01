@@ -7,7 +7,7 @@ use App\Http\Controllers\Api\ClientTaskController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('api/v1/client')->group(function () {
-    Route::middleware(['dashboard.audit', 'bearer.validate', 'session.load', 'rbac:client'])->group(function () {
+    Route::middleware(['dashboard.audit', 'keycloak.token'])->group(function () {
         Route::get('/dashboard', [ClientDashboardController::class, 'show']);
     });
 
@@ -32,3 +32,4 @@ Route::prefix('api/v1/client')->group(function () {
         Route::get('/users/{userId}', [AuthorizationProbeController::class, 'clientUser'])->middleware('owner');
     });
 });
+

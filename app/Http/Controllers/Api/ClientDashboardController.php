@@ -3,9 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Middleware\SessionMiddleware;
+use App\Http\Middleware\EnsureKeycloakBearerToken;
+use App\Http\Middleware\RequestContextMiddleware;
+use App\Security\Keycloak\KeycloakPrincipal;
 use App\Services\ClientPortal\ClientDashboardService;
-use App\Services\Session\SessionData;
 use App\Support\Api\ApiResponse;
 use App\Support\Api\Contracts\ClientPortal\DashboardData;
 use App\Support\Api\Contracts\ErrorData;
@@ -24,18 +25,19 @@ class ClientDashboardController extends Controller
     public function show(Request $request): JsonResponse
     {
         $correlationId = $this->resolveCorrelationId($request);
-        $session = $request->attributes->get(SessionMiddleware::REQUEST_ATTRIBUTE);
+        $principal = $request->attributes->get(EnsureKeycloakBearerToken::REQUEST_ATTRIBUTE);
 
-        if (! $session instanceof SessionData) {
+        if (! $principal instanceof KeycloakPrincipal) {
             $this->logger->error('dashboard.internal_error', [
                 'correlation_id' => $correlationId,
-                'reason' => 'MISSING_REQUEST_SESSION',
+                'reason' => 'MISSING_KEYCLOAK_PRINCIPAL',
             ]);
 
             return ApiResponse::error(
                 new ErrorData(
                     code: 'internal_error',
-                    message: 'The dashboard session context is unavailable.',
+                    message: 'The dashboard identity context is unavailable.',
+                    reason: 'INTERNAL_ERROR',
                 ),
                 500,
                 $correlationId,
@@ -43,14 +45,14 @@ class ClientDashboardController extends Controller
         }
 
         return ApiResponse::success(
-            DashboardData::fromDomain($this->dashboardService->build($session)),
+            DashboardData::fromDomain($this->dashboardService->build($principal)),
             correlationId: $correlationId,
         );
     }
 
     private function resolveCorrelationId(Request $request): ?string
     {
-        $attributeCorrelationId = $request->attributes->get(SessionMiddleware::CORRELATION_ID_ATTRIBUTE);
+        $attributeCorrelationId = $request->attributes->get(RequestContextMiddleware::CORRELATION_ID_ATTRIBUTE);
 
         if (is_string($attributeCorrelationId) && $attributeCorrelationId !== '') {
             return $attributeCorrelationId;
